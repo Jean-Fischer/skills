@@ -14,4 +14,5 @@ Central repository for reusable Pi skills and their supporting docs.
 - Keep each skill in `skills/<skill-name>/SKILL.md`
 - Keep supporting plans and guides in `docs/`
 - Prefer short, trigger-oriented skill files with details in supporting docs
+- Use `.gitattributes` to keep markdown and YAML files on LF line endings
 - Add an index entry here when new skills are added
