@@ -74,7 +74,9 @@ When cleaning dependency leftovers, validate `pnpm-lock.yaml` from a clean resol
 Normalize mixed standalone/NgModule setups, old bootstrap patterns, and stale test infrastructure before attempting later version hops.
 
 ## Local references
-- Offline handbook: `docs/plans/2026-06-17-angular-16-to-21-offline-migration-guide.md`
+- Handbook: `HANDBOOK.md`
+- Design note: `DESIGN.md`
+- Fixture plan: `FIXTURE-PLAN.md`
 - Final test stack and cleanup details live in the handbook.
 
 ## Style

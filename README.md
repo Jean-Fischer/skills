@@ -8,7 +8,9 @@ Central repository for reusable Pi skills and their supporting docs.
   - Offline Angular 16→21 migration workflow and Angular 21 final-state audit mode
   - Skill: `skills/angular-offline-migration/SKILL.md`
   - Skill README: `skills/angular-offline-migration/README.md`
-  - Handbook: `docs/plans/2026-06-17-angular-16-to-21-offline-migration-guide.md`
+  - Handbook: `skills/angular-offline-migration/HANDBOOK.md`
+  - Design notes: `skills/angular-offline-migration/DESIGN.md`
+  - Fixture plan: `skills/angular-offline-migration/FIXTURE-PLAN.md`
 
 ## Suggested repository conventions
 
