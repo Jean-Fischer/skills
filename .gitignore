@@ -1,4 +1,8 @@
+# generated and local-only files
 node_modules/
 dist/
 .angular/
 coverage/
+*.log
+*.tmp
+.DS_Store
