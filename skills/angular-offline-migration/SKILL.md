@@ -60,8 +60,9 @@ A hop is not complete until all of the following are satisfied:
 Check themes, typography, deprecated APIs, imports, and visible component behavior.
 
 ### DevExtreme / devextreme-angular
+Update `devextreme` and `devextreme-angular` together; for Angular 21 workspaces, target the 25.2.x line and verify peer compatibility before continuing.
 Check package compatibility, grid/editor rendering, bindings, validation, and runtime-only issues.
-If the workspace migrates tests to Vitest, expect DevExtreme Angular to need extra isolation or stubbing until the package is compatible with the new runner.
+If the workspace migrates tests to Vitest, keep an isolation/stubbing fallback ready; 25.2.x still trips the directory-import ESM path in the current fixture.
 
 ### Lockfile hygiene
 When cleaning dependency leftovers, validate `pnpm-lock.yaml` from a clean resolution state.
