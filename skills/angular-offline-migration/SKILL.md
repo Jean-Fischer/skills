@@ -75,8 +75,6 @@ Normalize mixed standalone/NgModule setups, old bootstrap patterns, and stale te
 
 ## Local references
 - Handbook: `HANDBOOK.md`
-- Design note: `DESIGN.md`
-- Fixture plan: `FIXTURE-PLAN.md`
 - Final test stack and cleanup details live in the handbook.
 
 ## Style
