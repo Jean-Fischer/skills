@@ -53,7 +53,7 @@ If the project uses Angular Material, update it with the matching major when Ang
 ng update @angular/material@<major>
 ```
 
-For DevExtreme, update `devextreme` and `devextreme-angular` together and verify peer compatibility before continuing.
+For DevExtreme, update `devextreme` and `devextreme-angular` together to the 25.2.x line and verify peer compatibility before continuing.
 
 ---
 
@@ -315,7 +315,8 @@ In the representative NgModule-based fixture we validated during authoring:
 - The core migration rewrote `src/main.ts` to pass `provideZoneChangeDetection()` through `bootstrapModule` via application providers.
 - The build continued to work with the 21.x package set.
 - The fixture later switched its unit tests from Karma/Jasmine to Vitest using `@angular/build:unit-test` and a local `runnerConfig` shim.
-- DevExtreme 24.1.7 remained compatible with Angular 21 in the runtime app shell, but its Angular wrapper was stubbed in the Vitest specs because the package currently trips ESM resolution in this runner.
+- DevExtreme 25.2.8 built successfully in the Angular 21 fixture once the initial budget was raised to 2MB, but the Vitest suite still hit the same directory-import ESM error from `devextreme-angular`.
+- The Angular wrapper therefore still needs isolation or stubbing in Vitest; the 25.2.x line did not remove the runner issue in this fixture.
 - The fixture still did not need any special router or `NgModuleFactory` remediation because it is intentionally simple.
 
 ---
@@ -329,7 +330,7 @@ Once the Angular major hops are complete, finish the end-state modernization of 
 4. Remove `karma.conf.js` and any `@angular-devkit/build-angular` test references.
 5. Keep `tsconfig.spec.json` on Vitest globals if the suite uses them.
 6. Rework specs so they do not depend on Karma-only bootstrap files.
-7. If DevExtreme Angular is part of the fixture, prefer stubbed selectors or other isolation in Vitest until the package is compatible with the new runner.
+7. If DevExtreme Angular is part of the fixture, prefer stubbed selectors or other isolation in Vitest; the current 25.2.x line still trips the directory-import ESM path in this fixture.
 
 ### Suggested migration order
 - change the builder first
@@ -373,11 +374,12 @@ When Angular Material is installed:
 
 ## Special handling: DevExtreme / devextreme-angular
 When DevExtreme is installed:
-- update `devextreme` and `devextreme-angular` together
+- update `devextreme` and `devextreme-angular` together to the 25.2.x line
 - check the package peer dependencies against the target Angular major
 - expect runtime-only issues even when build succeeds
 - verify grids, editors, and validation flows visually
 - treat license or theme warnings as separate from migration failures
+- if the app uses Vitest, keep a stub/isolation fallback available; 25.2.x still trips the directory-import ESM path in this fixture
 
 ### DevExtreme smoke checks
 - grid renders at least one row
