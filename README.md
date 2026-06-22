@@ -13,6 +13,12 @@ This repository contains reusable local Pi skills.
 - `angular-tests` — Angular test-writing guidance and test standards
   - Skill: `skills/angular-tests/SKILL.md`
   - Handbook: `skills/angular-tests/HANDBOOK.md`
+- `csharp` — General C# implementation guidance and coding standards
+  - Skill: `skills/csharp/SKILL.md`
+  - Handbook: `skills/csharp/HANDBOOK.md`
+- `csharp-tests` — C# test-writing guidance and test standards
+  - Skill: `skills/csharp-tests/SKILL.md`
+  - Handbook: `skills/csharp-tests/HANDBOOK.md`
 
 ## Repository conventions
 
