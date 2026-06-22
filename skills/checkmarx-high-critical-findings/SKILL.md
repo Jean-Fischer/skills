@@ -20,7 +20,12 @@ Turn the latest local Checkmarx scan into a compact, repo-local handoff for reme
 1. Run the Checkmarx CLI for the latest scan and export SARIF.
     - Pass the current git branch with `--branch`.
    - Use a repo-local output folder such as `artifacts\checkmarx` and create it before the scan if it does not already exist.
-    - Prefer `--use-gitignore` so the scanner respects the repository ignore rules instead of manually listing generated paths.
+    - Maintain a repo-local Checkmarx blacklist file (for example `cxblacklist.txt` or `checkmarxblacklist`) to exclude additional content such as large generated folders, third‑party code, or tracked files that were later added to `.gitignore`. If the blacklist file is missing, treat that as "no extra exclusions" rather than an error.
+    - Invoke the scan only through a small helper script that:
+      - uses `git ls-files` to enumerate tracked files,
+      - filters them using the blacklist patterns (same semantics as your pipelines),
+      - copies only the filtered files into a temporary working directory, and
+      - runs `cx scan create -s <workdir> ...` against that filtered directory.
     - This command usually takes several minutes; that is normal, and you should wait for it to finish before moving on.
     - This scan is expensive; do not rerun it for every small code iteration. Reuse the latest artifact while making local fixes, and rerun only after a meaningful batch of changes or before handoff.
 2. Normalize the SARIF into `artifacts\checkmarx\latest-findings.json` (or the same output folder you chose for the scan).
@@ -33,12 +38,21 @@ Turn the latest local Checkmarx scan into a compact, repo-local handoff for reme
 
 Use the installed Checkmarx CLI for this repo and request SARIF output. Keep the command stable for the project once chosen.
 
-Typical shape:
+Typical shape (shell / Node.js helper):
 
-```powershell
-New-Item -ItemType Directory -Force -Path artifacts\checkmarx | Out-Null
-cx scan create -s . --branch <current-git-branch> --project-name <project-name> --report-format sarif --output-path artifacts\checkmarx --output-name latest --scan-types sast,sca --debug --use-gitignore
+```bash
+mkdir -p artifacts/checkmarx
+# Run the helper from the skill directory (next to SKILL.md and normalize-sarif.mjs)
+node /path/to/checkmarx-high-critical-findings/cx-filtered-scan.mjs \
+  --source . \
+  --out-dir artifacts/checkmarx \
+  --project-name "<project-name>" \
+  --branch "$(git rev-parse --abbrev-ref HEAD)"
 ```
+
+- You **must** pass `--project-name` explicitly to the helper. Use the project name resolution rules below (including any `security-gate.yml`/`.yaml` conventions) to determine the correct value, then pass it to the script.
+- The helper reads `cxblacklist.txt` at the repo root when present and applies the same blacklist semantics as your pipelines. If the file is missing, it simply performs no extra exclusions beyond Git tracking.
+- The helper always builds a filtered temporary work directory based only on Git-tracked, non-blacklisted files and runs `cx scan create` against that directory before normalizing SARIF into `artifacts/checkmarx/latest-findings.json`.
 
 - Use `--debug` when you need detailed request and upload logs; there is no separate verbose flag in the CLI output used here.
 - Keep the repository `.gitignore` current so scan scope stays focused.
@@ -51,6 +65,7 @@ Before running a scan, make sure the Checkmarx project name is known.
 1. Check explicit local config first.
 2. Inspect pipeline YAML for an existing `project` / `project-name` / Checkmarx scan setting.
    - Common places include `.github/workflows/*.yml`, `.github/workflows/*.yaml`, `.gitlab-ci.yml`, and `azure-pipelines.yml`.
+   - If a `security-gate` pipeline is present and it does **not** pass an explicit project name parameter, use the Git repository name (remote URL last path segment without `.git`) as the Checkmarx project name.
 3. If no project name is defined anywhere, stop and ask the user for the exact project name instead of guessing.
 
 ## Distilled JSON
