@@ -239,6 +239,13 @@ async function mkdirp(dirPath) {
   await fs.mkdir(dirPath, { recursive: true });
 }
 
+/**
+ * Copy a file from src to dest, ensuring the destination directory exists.
+ *
+ * Returns true when the copy succeeds.
+ * Returns false when the source file is missing (ENOENT) and logs a message.
+ * All other errors are rethrown.
+ */
 async function copyFileWithDirs(src, dest) {
   const dir = dirname(dest);
   await mkdirp(dir);
@@ -284,7 +291,7 @@ async function buildFilteredWorkdir(sourceDir, patterns) {
     }
   }
 
-  logInfo(`Filtered workdir ready at '${workDir}': ${copied} file(s) copied, ${skipped} file(s) excluded.`);
+  logInfo(`Filtered workdir ready at '${workDir}': ${copied} file(s) copied, ${skipped} file(s) skipped (excluded or missing).`);
   return { workDir, copied, skipped };
 }
 
