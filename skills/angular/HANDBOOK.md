@@ -171,6 +171,8 @@ Keep these notes in mind:
 - do not introduce APIs that the project version cannot use yet
 - keep the handbook aligned with the repo’s Angular baseline
 - if the project is mid-migration, preserve current conventions until the migration plan says otherwise
+- if the workspace uses DevExtreme / `devextreme-angular`, treat upgrading both packages together as mandatory compatibility work; keep them on the same supported major line and move them to the repo’s supported 25.x or 26.x series before considering the Angular change complete
+- verify DevExtreme widgets in the browser and under the test runner, because build success alone is not enough
 
 ---
 
