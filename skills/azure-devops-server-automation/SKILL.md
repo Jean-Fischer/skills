@@ -17,8 +17,9 @@ Authenticate with `AZDO_PAT`.
 
 ## Guardrails
 - Azure DevOps Server on-prem only
+- Use PAT auth via `AZDO_PAT`
 - No classic pipelines in v1
-- No releases
+- No releases in v1
 - No Azure DevOps CLI dependency
 - No GitHub App or CLA-bot framing
 
