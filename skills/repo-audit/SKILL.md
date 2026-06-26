@@ -18,7 +18,7 @@ Use this skill as the top-level entry point for a repository-wide audit.
 ## Specialist choice
 - `angular-offline-migration` and `angular` when Angular is present; the migration skill covers version/state risk and the Angular skill covers best-practice review.
 - `csharp` when the repo has .NET / C# code or backend conventions to audit.
-- `checkmarx-high-critical-findings` when a local Checkmarx artifact exists or security triage is requested.
+- `checkmarx-high-critical-findings` when a local Checkmarx artifact exists.
 - `sonarqube-scan` when SonarQube analysis, quality gate status, or issue summaries are available.
 - Mixed repos are not a reason to skip a verified stack.
 

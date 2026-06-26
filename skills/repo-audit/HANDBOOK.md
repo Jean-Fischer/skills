@@ -17,7 +17,7 @@ If the evidence is ambiguous, prefer the conservative path: mark the checkpoint 
 Use the same map every time:
 - Angular present → run `angular-offline-migration` and `angular`
 - .NET / C# present → run `csharp`
-- Checkmarx artifact present or security triage requested → run `checkmarx-high-critical-findings`
+- Checkmarx artifact present → run `checkmarx-high-critical-findings`
 - SonarQube analysis available → run `sonarqube-scan`
 
 Treat Angular presence as a repo-level evidence check, not a free-form judgment call. If Angular is present, both Angular specialists must run.
@@ -47,8 +47,8 @@ If time is tight:
 
 ## Report shape
 Keep the final answer short and structured:
-- executive summary
 - checklist of checkpoints with statuses
+- executive summary
 - specialist findings with evidence paths
 - next actions
 - blocked or missing inputs
