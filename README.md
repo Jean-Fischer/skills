@@ -13,6 +13,9 @@ This repository contains reusable local Pi skills.
 - `angular-tests` — Angular test-writing guidance and test standards
   - Skill: `skills/angular-tests/SKILL.md`
   - Handbook: `skills/angular-tests/HANDBOOK.md`
+- `azure-devops-server-automation` — Azure DevOps Server on-prem PR, YAML pipeline, and variable group REST automation
+  - Skill: `skills/azure-devops-server-automation/SKILL.md`
+  - Handbook: `skills/azure-devops-server-automation/HANDBOOK.md`
 - `csharp` — General C# implementation guidance and coding standards
   - Skill: `skills/csharp/SKILL.md`
   - Handbook: `skills/csharp/HANDBOOK.md`
