@@ -1,6 +1,6 @@
 ---
 name: sonarqube-scan
-description: Use when you need the latest authenticated SonarQube quality-gate status or issue summary for a repository whose CI already ran analysis — especially when the user asks for "quality gate", "top issues", or "SonarQube results" and you should query the local sonar CLI instead of browsing the UI.
+description: Use when you need SonarQube analysis results for a repo after CI already ran — quality gate, coverage, issues, hotspots, or branch/PR status — and should query the local sonar CLI instead of browsing the UI.
 ---
 
 # SonarQube Scan

@@ -1,6 +1,6 @@
 ---
 name: repo-audit
-description: Use when auditing or triaging an unfamiliar local repository — for example, when the user says "review this repo", "inspect this codebase", "triage the repository", or asks for Angular migration, Angular best-practice, .NET/C#, Checkmarx, or SonarQube signals. Use this even if the stack is only implied; inspect the repo first and route to the right specialists.
+description: Use when auditing or triaging a local repo or codebase — for example, when the user says "review this repo", "inspect this codebase", "repo-wide health check", or "triage findings". Inspect the repo first, then route verified Angular, .NET/C#, Checkmarx, or SonarQube signals to the right specialists.
 ---
 
 # Repo Audit

@@ -1,6 +1,6 @@
 ---
 name: angular
-description: Use when the user wants to create, review, refactor, or troubleshoot Angular application code — including components, directives, services, templates, routing, forms, signals, accessibility, or styling — or when they say things like "fix this Angular app" or "review this component." 
+description: Use when the user wants to create, review, refactor, or troubleshoot Angular application or workspace code — including components, directives, services, templates, routing, forms, signals, accessibility, or styling — or when they say things like "fix this Angular app" or "review this component."
 ---
 
 # Angular Standards
