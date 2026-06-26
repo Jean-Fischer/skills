@@ -239,10 +239,26 @@ async function mkdirp(dirPath) {
   await fs.mkdir(dirPath, { recursive: true });
 }
 
+/**
+ * Copy a file from src to dest, ensuring the destination directory exists.
+ *
+ * Returns true when the copy succeeds.
+ * Returns false when the source file is missing (ENOENT) and logs a message.
+ * All other errors are rethrown.
+ */
 async function copyFileWithDirs(src, dest) {
   const dir = dirname(dest);
   await mkdirp(dir);
-  await fs.copyFile(src, dest);
+  try {
+    await fs.copyFile(src, dest);
+    return true;
+  } catch (err) {
+    if (err && err.code === "ENOENT") {
+      logInfo(`Source file missing, skipping: ${src}`);
+      return false;
+    }
+    throw err;
+  }
 }
 
 function makeTempWorkdir() {
@@ -267,11 +283,15 @@ async function buildFilteredWorkdir(sourceDir, patterns) {
     }
     const srcFull = resolve(sourceDir, relPath.split("/").join(sep));
     const destFull = resolve(workDir, relPath.split("/").join(sep));
-    await copyFileWithDirs(srcFull, destFull);
-    copied++;
+    const copiedOk = await copyFileWithDirs(srcFull, destFull);
+    if (copiedOk) {
+      copied++;
+    } else {
+      skipped++;
+    }
   }
 
-  logInfo(`Filtered workdir ready at '${workDir}': ${copied} file(s) copied, ${skipped} file(s) excluded.`);
+  logInfo(`Filtered workdir ready at '${workDir}': ${copied} file(s) copied, ${skipped} file(s) skipped (excluded or missing).`);
   return { workDir, copied, skipped };
 }
 
