@@ -1,6 +1,6 @@
 ---
 name: repo-audit
-description: Use when auditing an unfamiliar local repository for Angular migration, Angular best-practice, .NET, Checkmarx, or SonarQube signals.
+description: Use when auditing or triaging an unfamiliar local repository — for example, when the user says "review this repo", "inspect this codebase", "triage the repository", or asks for Angular migration, Angular best-practice, .NET/C#, Checkmarx, or SonarQube signals. Use this even if the stack is only implied; inspect the repo first and route to the right specialists.
 ---
 
 # Repo Audit
@@ -14,6 +14,7 @@ Use this skill as the top-level entry point for a repository-wide audit.
 4. Prefer audit/reporting only; v1 does not edit files or apply fixes.
 5. Mark missing inputs as blocked instead of guessing.
 6. Re-run the relevant specialist only if the source artifact changes.
+7. For the exact preflight checklist, routing map, and report shape, follow `HANDBOOK.md`.
 
 ## Specialist choice
 - `angular-offline-migration` and `angular` when Angular is present; the migration skill covers version/state risk and the Angular skill covers best-practice review.
@@ -23,7 +24,7 @@ Use this skill as the top-level entry point for a repository-wide audit.
 - Mixed repos are not a reason to skip a verified stack.
 
 ## Output
-Report what was checked, which specialists ran, the top findings in risk order, and any blocked inputs.
+Report what was checked, which specialists ran, the top findings in risk order, and any blocked inputs. Keep it checklist-first and short; the detailed report shape lives in `HANDBOOK.md`.
 
 ## Under pressure
 Use the newest local artifacts, run every specialist required by verified evidence, and stop after the top blockers if time is tight.
