@@ -190,11 +190,13 @@ Useful filters:
 GET /{project}/_apis/distributedtask/variablegroups?groupName={groupName}&api-version=7.1
 ```
 
-If you already know the id, use `groupIds={groupId}` on the same list endpoint:
+If you already know the id, use the same list endpoint with `groupIds={groupId}`:
 
 ```http
 GET /{project}/_apis/distributedtask/variablegroups?groupIds={groupId}&api-version=7.1
 ```
+
+This is the documented by-id lookup form for the list endpoint.
 
 ### Create a variable group
 
@@ -209,8 +211,9 @@ PUT /_apis/distributedtask/variablegroups/{groupId}?api-version=7.1
 ```
 
 Notes:
-- The create/update routes are org-level in the REST docs; they do not include the project segment.
+- The create/update routes are documented at the organization level in the REST docs and intentionally omit the project segment.
 - The list/read routes are project-scoped.
+- The variable-group resource is still used from project pipelines, so make the route style explicit in your request examples.
 
 Request body fields:
 - `name`
