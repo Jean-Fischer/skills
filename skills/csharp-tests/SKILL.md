@@ -1,6 +1,6 @@
 ---
 name: csharp-tests
-description: C# test standards and test-writing guidance for test code. Use when writing, reviewing, refactoring, or stabilizing C# tests, including xUnit, NSubstitute, test naming, fixtures, async tests, mocking, and test organization.
+description: Use when the user wants C# test standards and test-writing guidance for test code, including xUnit, NSubstitute, test naming, fixtures, async tests, mocking, and test organization.
 ---
 
 # C# Test Standards

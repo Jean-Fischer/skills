@@ -16,12 +16,21 @@ This repository contains reusable local Pi skills.
 - `azure-devops-server-automation` — Azure DevOps Server on-prem PR, YAML pipeline, and variable group REST automation
   - Skill: `skills/azure-devops-server-automation/SKILL.md`
   - Handbook: `skills/azure-devops-server-automation/HANDBOOK.md`
-- `csharp` — General C# implementation guidance and coding standards
+- `checkmarx-high-critical-findings` — Local Checkmarx finding triage for critical and high issues
+  - Skill: `skills/checkmarx-high-critical-findings/SKILL.md`
+  - Handbook: `skills/checkmarx-high-critical-findings/HANDBOOK.md`
+- `csharp` — C# coding standards and implementation guidance for production code
   - Skill: `skills/csharp/SKILL.md`
   - Handbook: `skills/csharp/HANDBOOK.md`
-- `csharp-tests` — C# test-writing guidance and test standards
+- `csharp-tests` — C# test standards and test-writing guidance for test code
   - Skill: `skills/csharp-tests/SKILL.md`
   - Handbook: `skills/csharp-tests/HANDBOOK.md`
+- `repo-audit` — Top-level repository audit orchestrator for Angular, Angular tests, .NET, C# tests, Checkmarx, and SonarQube checks
+  - Skill: `skills/repo-audit/SKILL.md`
+  - Handbook: `skills/repo-audit/HANDBOOK.md`
+- `sonarqube-scan` — SonarQube quality-gate and issue summary retrieval
+  - Skill: `skills/sonarqube-scan/SKILL.md`
+  - Handbook: `skills/sonarqube-scan/HANDBOOK.md`
 
 ## Repository conventions
 

@@ -1,6 +1,6 @@
 ---
 name: angular-tests
-description: Angular test guidance for application tests. Use when creating, reviewing, refactoring, or stabilizing Angular unit or integration tests, including TestBed, harnesses, HTTP tests, router tests, async behavior, and component fixtures.
+description: Use when the user wants to create, review, refactor, or stabilize Angular unit or integration tests/specs — including TestBed, harnesses, HTTP tests, router tests, async behavior, and component fixtures — or when they ask to tighten flaky Angular tests.
 ---
 
 # Angular Test Standards

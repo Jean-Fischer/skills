@@ -1,6 +1,6 @@
 ---
 name: angular
-description: Angular implementation guidance for application code. Use when creating, reviewing, refactoring, or troubleshooting Angular components, directives, services, templates, routing, forms, signals, accessibility, or styling.
+description: Use when the user wants to create, review, refactor, or troubleshoot Angular application or workspace code — including components, directives, services, templates, routing, forms, signals, accessibility, or styling — or when they say things like "fix this Angular app" or "review this component."
 ---
 
 # Angular Standards
