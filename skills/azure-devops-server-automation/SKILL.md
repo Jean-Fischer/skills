@@ -1,6 +1,6 @@
 ---
 name: azure-devops-server-automation
-description: Use when automating Azure DevOps Server on-prem pull requests, YAML pipelines, or variable groups with PAT-authenticated REST APIs.
+description: Use when the user needs to automate or inspect Azure DevOps Server/TFS on-prem pull requests, YAML pipelines, or variable groups with PAT-authenticated REST APIs — especially when they mention PRs, pipeline runs, or variable-group changes without naming the API directly.
 ---
 
 # Azure DevOps Server Automation

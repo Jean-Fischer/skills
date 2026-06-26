@@ -1,6 +1,6 @@
 ---
 name: checkmarx-high-critical-findings
-description: Use when a local Checkmarx scan needs triage of the latest repository findings, especially high and critical issues, hotspot clusters, or a large SARIF artifact.
+description: Use when triaging the latest local Checkmarx scan artifact — especially SARIF or normalized findings that include high and critical issues, hotspot clusters, or a repo-local remediation handoff.
 ---
 
 # Checkmarx High Critical Findings

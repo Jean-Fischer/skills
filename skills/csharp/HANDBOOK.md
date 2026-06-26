@@ -7,6 +7,19 @@ It is meant for production C# code, not test code.
 
 The source material behind these notes targets a modern .NET 10 / C# 14 toolchain.
 
+## Table of contents
+- Scope
+- Project structure
+- Project configuration
+- Managing projects
+- Coding conventions
+- Code documentation
+- Namespaces
+- Nullable reference types
+- Additional conventions
+- Detailed example
+- Things to keep in mind
+
 ---
 
 ## Project structure

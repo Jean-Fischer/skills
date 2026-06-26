@@ -19,6 +19,27 @@ For each hop:
 5. Run the validation checklist.
 6. Only then move to the next major version.
 
+## Table of contents
+- Purpose
+- How to use this guide
+- General rules
+- Baseline inspection checklist
+- Recommended commands
+- Angular 16 → 17
+- Angular 17 → 18
+- Angular 18 → 19
+- Angular 19 → 20
+- Angular 20 → 21
+- Angular 21 → 22
+- Final test-runner migration: Karma/Jasmine → Vitest
+- Angular 22 final-state audit checklist
+- Special handling: Angular Material
+- Special handling: DevExtreme / devextreme-angular
+- Special handling: partially migrated apps
+- Verification matrix
+- Suggested workflow summary
+- Notes for the offline skill
+
 ## General rules
 - Do not skip versions.
 - Do not mix several Angular majors in one change set.
