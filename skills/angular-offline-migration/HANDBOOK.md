@@ -1,7 +1,7 @@
-# Angular 16 → 21 Offline Migration Guide
+# Angular 16 → 22 Offline Migration Guide
 
 ## Purpose
-This handbook describes a repeatable offline migration path from Angular 16 to Angular 21.
+This handbook describes a repeatable offline migration path from Angular 16 to Angular 22.
 
 It is written for airgapped environments where online Angular migration docs are unavailable. The recommended approach is always:
 
@@ -321,6 +321,56 @@ In the representative NgModule-based fixture we validated during authoring:
 
 ---
 
+## Angular 21 → 22
+
+### What to expect
+Angular 22 keeps the signal-first direction and raises the toolchain floor again.
+
+Migration-relevant changes:
+- TypeScript 6.0.0 or newer is required, with `< 6.1.0` support for the 22.x line
+- Node.js 22.22.3+, 24.15.0+, or 26.0.0+ are supported for 22.x
+- `ChangeDetectionStrategy.Eager` is added by the migration to preserve prior eager change-detection behavior because v22 makes `OnPush` the default
+- existing templates, tests, and custom builders may need a quick sanity check after the TS 6 upgrade
+- DevExtreme 25.2.x remains the validated compatibility line for this fixture
+
+### What to do
+1. Confirm the workspace is on a supported Node and TypeScript version for Angular 22.
+2. Run:
+
+```bash
+ng update @angular/core@22 @angular/cli@22
+```
+
+3. Review the generated `ChangeDetectionStrategy.Eager` additions and decide whether they should stay or be intentionally replaced with `OnPush` in later refactors.
+4. Fix compiler, template, and runtime fallout from the update.
+5. Recheck DevExtreme warnings, budgets, and Vitest isolation if the fixture uses them.
+6. Re-run the validation checklist before moving on.
+
+### Watch for
+- components that gained explicit eager change detection
+- TypeScript 6 syntax or lib incompatibilities
+- stale test harness assumptions after the CLI update
+- build-budget noise from large third-party style bundles
+- DevExtreme runtime-only issues that only show up under Vitest or in the browser
+
+### Validate
+- `ng build`
+- `ng test`
+- `ng lint`
+- app boots
+- main route renders
+- Material smoke test passes, if Material is present
+- DevExtreme smoke test passes
+
+### Fixture notes from the Angular 21 → 22 testbed
+In the representative fixture validated during authoring:
+- `ng update @angular/core@22 @angular/cli@22` updated the Angular packages and TypeScript cleanly.
+- The core migration inserted `ChangeDetectionStrategy.Eager` into `src/app/app.ts`.
+- `tsconfig.app.json` gained extended-diagnostic suppressions for nullish-coalescing and optional-chaining checks.
+- The app continued to use `@angular/build:application` for build and `@angular/build:unit-test` for tests.
+- The workspace built, tested, and served successfully after the migration.
+- DevExtreme 25.2.8 remained compatible with Angular 22 in this fixture.
+
 ## Final test-runner migration: Karma/Jasmine → Vitest
 Once the Angular major hops are complete, finish the end-state modernization of the fixture's test stack:
 
@@ -338,7 +388,7 @@ Once the Angular major hops are complete, finish the end-state modernization of 
 - then verify the app and tests are green together
 - finally remove any stale Karma-era references from docs and scripts
 
-## Angular 21 final-state audit checklist
+## Angular 22 final-state audit checklist
 Use this when the repo already claims to be finished.
 
 ### Red flags
@@ -349,11 +399,11 @@ Use this when the repo already claims to be finished.
 - DevExtreme specs that still need stubbing/isolation because they fail under Vitest
 
 ### Final-state signals
-- Angular packages are on the intended 21.x line
+- Angular packages are on the intended 22.x line
 - `@angular/build:application` is used for build
 - `@angular/build:unit-test` is used for tests
 - `pnpm why karma` and `pnpm why inflight` are empty in a clean workspace, aside from optional peer metadata on `@angular/build`
-- build, tests, and lint all pass
+- build, tests, and lint all pass, or any missing lint target is documented intentionally
 - any Material or DevExtreme exceptions are intentional and documented
 
 ---

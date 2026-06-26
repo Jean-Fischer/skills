@@ -4,7 +4,7 @@ This repository contains reusable local Pi skills.
 
 ## Current skills
 
-- `angular-offline-migration` — Offline Angular 16→21 migration workflow and Angular 21 final-state audit mode
+- `angular-offline-migration` — Offline Angular 16→22 migration workflow and Angular 22 final-state audit mode
   - Skill: `skills/angular-offline-migration/SKILL.md`
   - Handbook: `skills/angular-offline-migration/HANDBOOK.md`
 - `angular` — Angular application implementation guidance and coding standards
