@@ -6,7 +6,9 @@ This skill is audit-only in v1. It routes to the right existing specialists and 
 ## Preflight
 Before choosing specialists, verify the repo shape and look for these inputs:
 - Angular workspace / frontend app files, especially `angular.json` or Angular package usage
+- Angular test code or specs, especially `*.spec.ts`
 - `.csproj` / `.sln` / backend code or other C# source
+- C# test projects or test source
 - pipeline YAML or security-gate files
 - local Checkmarx SARIF or normalized findings
 - SonarQube analysis or quality-gate output
@@ -16,11 +18,13 @@ If the evidence is ambiguous, prefer the conservative path: mark the checkpoint 
 ## Fixed routing
 Use the same map every time:
 - Angular present → run `angular-offline-migration` and `angular`
+- Angular test code present → run `angular-tests`
 - .NET / C# present → run `csharp`
+- C# test code present → run `csharp-tests`
 - Checkmarx artifact present → run `checkmarx-high-critical-findings`
 - SonarQube analysis available → run `sonarqube-scan`
 
-Treat Angular presence as a repo-level evidence check, not a free-form judgment call. If Angular is present, both Angular specialists must run.
+Treat Angular presence as a repo-level evidence check, not a free-form judgment call. If Angular is present, both Angular specialists must run; if Angular test code is present, also run `angular-tests`.
 
 If the evidence is missing, mark that checkpoint `blocked` rather than guessing.
 

@@ -1,6 +1,6 @@
 ---
 name: repo-audit
-description: Use when auditing or triaging a local repo or codebase — for example, when the user says "review this repo", "inspect this codebase", "repo-wide health check", or "triage findings". Inspect the repo first, then route verified Angular, .NET/C#, Checkmarx, or SonarQube signals to the right specialists.
+description: Use when auditing or triaging a local repo or codebase — for example, when the user says "review this repo", "inspect this codebase", "repo-wide health check", or "triage findings". Inspect the repo first, then route verified Angular, Angular test, .NET/C#, C# test, Checkmarx, or SonarQube signals to the right specialists.
 ---
 
 # Repo Audit
@@ -10,7 +10,7 @@ Use this skill as the top-level entry point for a repository-wide audit.
 ## Rules
 1. Inspect the repo first; do not choose specialists blindly.
 2. Use a fixed specialist map; do not invent new checks.
-3. If the repo is Angular, run both Angular specialists: `angular-offline-migration` and `angular`.
+3. If the repo is Angular, run both Angular specialists: `angular-offline-migration` and `angular`; if Angular test code is present, also run `angular-tests`.
 4. Prefer audit/reporting only; v1 does not edit files or apply fixes.
 5. Mark missing inputs as blocked instead of guessing.
 6. Re-run the relevant specialist only if the source artifact changes.
@@ -18,7 +18,9 @@ Use this skill as the top-level entry point for a repository-wide audit.
 
 ## Specialist choice
 - `angular-offline-migration` and `angular` when Angular is present; the migration skill covers version/state risk and the Angular skill covers best-practice review.
+- `angular-tests` when Angular test code or specs are present; use it alongside `angular` for test review.
 - `csharp` when the repo has .NET / C# code or backend conventions to audit.
+- `csharp-tests` when C# test code or test projects are present; use it alongside `csharp` for test review.
 - `checkmarx-high-critical-findings` when a local Checkmarx artifact exists.
 - `sonarqube-scan` when SonarQube analysis, quality gate status, or issue summaries are available.
 - Mixed repos are not a reason to skip a verified stack.

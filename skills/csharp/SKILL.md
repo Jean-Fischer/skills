@@ -1,6 +1,6 @@
 ---
 name: csharp
-description: C# coding standards and implementation guidance for production code. Use when writing, reviewing, refactoring, troubleshooting, or reshaping C# application code, including project structure, namespaces, nullability, constructors, XML docs, and general .NET conventions.
+description: Use when the user wants C# coding standards and implementation guidance for production code, including project structure, namespaces, nullability, constructors, XML docs, and general .NET conventions.
 ---
 
 # C# Standards
