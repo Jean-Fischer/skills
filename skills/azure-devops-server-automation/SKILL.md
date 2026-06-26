@@ -1,6 +1,6 @@
 ---
 name: azure-devops-server-automation
-description: Use when automating Azure DevOps Server on-prem pull requests, YAML pipelines, or variable groups via REST APIs with PAT authentication.
+description: Use when automating Azure DevOps Server on-prem pull requests, YAML pipelines, or variable groups with PAT-authenticated REST APIs.
 ---
 
 # Azure DevOps Server Automation
@@ -28,5 +28,9 @@ Authenticate with `AZDO_PAT`.
 2. Use the REST endpoint that matches the surface.
 3. Keep secrets in `AZDO_PAT` and use PAT-based auth.
 4. Stay within the supported v1 surfaces above.
+
+## When Not to Use
+- Azure DevOps Services/cloud-only guidance
+- classic pipelines, releases, or CLI-first workflows
 
 See `HANDBOOK.md` for exact REST routes, request shapes, and caveats.

@@ -190,7 +190,11 @@ Useful filters:
 GET /{project}/_apis/distributedtask/variablegroups?groupName={groupName}&api-version=7.1
 ```
 
-If you already know the id, use `groupIds={groupId}` on the same list endpoint.
+If you already know the id, use `groupIds={groupId}` on the same list endpoint:
+
+```http
+GET /{project}/_apis/distributedtask/variablegroups?groupIds={groupId}&api-version=7.1
+```
 
 ### Create a variable group
 
