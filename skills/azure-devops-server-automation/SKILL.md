@@ -24,10 +24,11 @@ Authenticate with `AZDO_PAT`.
 - No GitHub App or CLA-bot framing
 
 ## Workflow
-1. Identify the server base URL, collection/project, and repository or pipeline IDs.
-2. Use the REST endpoint that matches the surface.
-3. Keep secrets in `AZDO_PAT` and use PAT-based auth.
-4. Stay within the supported v1 surfaces above.
+1. Resolve repo context from the most specific source available: explicit overrides first, then a repo-local sidecar config if one exists, then `git remote get-url origin` when running inside a Git repository.
+2. If the remote URL matches an Azure DevOps clone URL, derive the server base URL, collection, project, and repository name from it instead of asking for each value.
+3. Use the REST endpoint that matches the surface.
+4. Keep secrets in `AZDO_PAT` and use PAT-based auth.
+5. Stay within the supported v1 surfaces above.
 
 ## When Not to Use
 - Azure DevOps Services/cloud-only guidance
