@@ -35,6 +35,26 @@ Notes:
 
 ---
 
+## Repo context resolution
+
+When the command runs inside a Git repository, treat the remote URL as the default source of repo context.
+
+Resolution order:
+1. Explicit user input or command-line overrides.
+2. A repo-local sidecar config, if your workflow defines one.
+3. `git remote get-url origin` from the current repository.
+4. Ask the user only if the remote URL is missing or cannot be parsed confidently.
+
+For the common Azure DevOps Server clone URL shape, derive these values from the remote:
+- server base URL
+- collection
+- project
+- repository name
+
+Prefer the remote URL as the canonical source instead of asking for the same four values on every run. If the remote does not look like an Azure DevOps URL, do not guess.
+
+---
+
 ## Pull requests
 
 ### Create a pull request
