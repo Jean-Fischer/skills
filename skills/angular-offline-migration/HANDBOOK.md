@@ -338,6 +338,7 @@ In the representative NgModule-based fixture we validated during authoring:
 - The fixture later switched its unit tests from Karma/Jasmine to Vitest using `@angular/build:unit-test` and a local `runnerConfig` shim.
 - DevExtreme 25.2.8 built successfully in the Angular 21 fixture once the initial budget was raised to 2MB, but the Vitest suite still hit the same directory-import ESM error from `devextreme-angular`.
 - The Angular wrapper therefore still needs isolation or stubbing in Vitest; the 25.2.x line did not remove the runner issue in this fixture.
+- ESLint was upgraded to the latest 10.x line during the Vitest/DevExtreme compatibility work to eliminate the legacy `inflight` dependency from the lockfile and clear Checkmarx SCA findings.
 - The fixture still did not need any special router or `NgModuleFactory` remediation because it is intentionally simple.
 
 ---
@@ -424,6 +425,7 @@ Use this when the repo already claims to be finished.
 - `@angular/build:application` is used for build
 - `@angular/build:unit-test` is used for tests
 - `pnpm why karma` and `pnpm why inflight` are empty in a clean workspace, aside from optional peer metadata on `@angular/build`
+- `eslint` is updated to the latest 10.x line in the final state so that the workspace no longer pulls `inflight@1.0.6` through legacy `glob`/`rimraf` chains and Checkmarx SCA findings remain clean
 - build, tests, and lint all pass, or any missing lint target is documented intentionally
 - any Material or DevExtreme exceptions are intentional and documented
 
