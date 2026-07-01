@@ -1,0 +1,200 @@
+{
+  "name": "repo-audit",
+  "description": "Discover repo audit scopes, fan out specialist reviews per scope, and synthesize one consolidated audit report.",
+  "chain": [
+    {
+      "agent": "scout",
+      "phase": "Discovery",
+      "label": "Discover repo audit targets",
+      "as": "discovery",
+      "skill": ["repo-audit"],
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["repoSummary", "targets", "blocked"],
+        "properties": {
+          "repoSummary": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["summary", "evidencePaths"],
+            "properties": {
+              "summary": { "type": "string" },
+              "evidencePaths": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "domain", "scopeLabel", "rootPath", "evidencePaths", "skills", "taskSummary", "blockedNotes"],
+              "properties": {
+                "id": { "type": "string" },
+                "domain": {
+                  "type": "string",
+                  "enum": ["angular", "angular-tests", "csharp", "csharp-tests"]
+                },
+                "scopeLabel": { "type": "string" },
+                "rootPath": { "type": "string" },
+                "evidencePaths": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "skills": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "minItems": 1
+                },
+                "taskSummary": { "type": "string" },
+                "blockedNotes": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              }
+            }
+          },
+          "blocked": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["domain", "scopeLabel", "reason", "evidencePaths"],
+              "properties": {
+                "domain": { "type": "string" },
+                "scopeLabel": { "type": "string" },
+                "reason": { "type": "string" },
+                "evidencePaths": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "task": "Run /skill:repo-audit discovery only for: {task}. Read HANDBOOK.md from the repo-audit skill directory and follow its discovery guardrails. Treat HANDBOOK.md and chains/repo-audit.chain.json as skill-owned assets; do not expect the audited repo to contain them, and do not mark their absence in the audited repo as blocked. Return structured_output only with this shape: {\"repoSummary\":{\"summary\":string,\"evidencePaths\":string[]},\"targets\":Target[],\"blocked\":Blocked[]}. Emit one runnable target per specialist scope, not one per stack. Use separate targets for code/app scopes and test scopes. Example: one Angular project with specs should yield one angular target and one angular-tests target. If the repo has one WebApi plus multiple batch apps, emit one csharp target per independent project root or project group rather than one collapsed backend target. If a C# project looks like a test scope by name or location but is an OutputType Exe project without Microsoft.NET.Test.Sdk or a recognized .NET test framework, still emit a csharp-tests target and note in taskSummary or blockedNotes that it appears to be a nonstandard/manual test harness. Embed the required skills directly in each target: angular => [\"angular-offline-migration\",\"angular\"], angular-tests => [\"angular-tests\"], csharp => [\"csharp\"], csharp-tests => [\"csharp-tests\"]. Use blocked only for ambiguous or insufficient evidence that prevents creating a runnable target. Do not use blocked for missing local dependencies, missing tool installs, or other runner/environment limitations discovered after routing. Do not edit files. Do not run builds or tests during discovery. Keep repoSummary concise."
+    },
+    {
+      "phase": "Audit fanout",
+      "label": "Audit each discovered scope",
+      "expand": {
+        "from": { "output": "discovery", "path": "/targets" },
+        "item": "target",
+        "key": "/id",
+        "maxItems": 24,
+        "onEmpty": "skip"
+      },
+      "parallel": {
+        "agent": "reviewer",
+        "label": "Audit {target.scopeLabel}",
+        "skill": ["angular-offline-migration", "angular", "angular-tests", "csharp", "csharp-tests"],
+        "outputSchema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["targetId", "domain", "scopeLabel", "status", "summary", "findings", "evidencePaths", "blockedNotes"],
+          "properties": {
+            "targetId": { "type": "string" },
+            "domain": { "type": "string" },
+            "scopeLabel": { "type": "string" },
+            "status": {
+              "type": "string",
+              "enum": ["PASS", "WARN", "FAIL", "BLOCKED"]
+            },
+            "summary": { "type": "string" },
+            "findings": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["severity", "title", "details"],
+                "properties": {
+                  "severity": {
+                    "type": "string",
+                    "enum": ["info", "low", "medium", "high", "critical"]
+                  },
+                  "title": { "type": "string" },
+                  "details": { "type": "string" },
+                  "evidencePaths": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              }
+            },
+            "evidencePaths": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "blockedNotes": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "task": "Audit exactly one discovered repo scope for: {task}. Target JSON: {target}. This is audit-only. Do not edit files. Do not implement fixes. Load only the skills named in target.skills from the shared available set, and ignore the others. Scope your review to target.rootPath and target.evidencePaths. Follow target.taskSummary. If the target represents a C# test-like project that appears to be a nonstandard/manual test harness, call that out explicitly in the summary or findings instead of assuming automated test coverage. Keep runner/environment limitations separate from discovery blockers; do not convert missing local dependencies or missing installs into blocked discovery items. Prefer config and artifact inspection over executing full builds or test suites. Return structured_output only with: targetId, domain, scopeLabel, status, summary, findings, evidencePaths, blockedNotes. Keep it checklist-first and high-level: top risks, strongest evidence, concise rationale."
+      },
+      "collect": {
+        "as": "scopeAudits",
+        "outputSchema": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "index", "item", "agent", "exitCode", "text"],
+            "properties": {
+              "key": { "type": "string" },
+              "index": { "type": "integer" },
+              "item": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "domain", "scopeLabel", "rootPath", "evidencePaths", "skills", "taskSummary", "blockedNotes"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "domain": { "type": "string" },
+                  "scopeLabel": { "type": "string" },
+                  "rootPath": { "type": "string" },
+                  "evidencePaths": { "type": "array", "items": { "type": "string" } },
+                  "skills": { "type": "array", "items": { "type": "string" } },
+                  "taskSummary": { "type": "string" },
+                  "blockedNotes": { "type": "array", "items": { "type": "string" } }
+                }
+              },
+              "agent": { "type": "string" },
+              "exitCode": { "type": ["integer", "null"] },
+              "text": { "type": "string" },
+              "structured": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["targetId", "domain", "scopeLabel", "status", "summary", "findings", "evidencePaths", "blockedNotes"],
+                "properties": {
+                  "targetId": { "type": "string" },
+                  "domain": { "type": "string" },
+                  "scopeLabel": { "type": "string" },
+                  "status": { "type": "string" },
+                  "summary": { "type": "string" },
+                  "findings": { "type": "array" },
+                  "evidencePaths": { "type": "array", "items": { "type": "string" } },
+                  "blockedNotes": { "type": "array", "items": { "type": "string" } }
+                }
+              },
+              "error": { "type": "string" },
+              "timedOut": { "type": "boolean" },
+              "outputPath": { "type": "string" }
+            }
+          }
+        }
+      },
+      "concurrency": 4
+    },
+    {
+      "agent": "reviewer",
+      "phase": "Synthesis",
+      "label": "Build consolidated repo audit",
+      "skill": ["repo-audit"],
+      "task": "Synthesize one final repo-audit report for: {task}. Use /skill:repo-audit for the final report shape and audit-only policy. Discovery output: {outputs.discovery}. Collected scope audits: {outputs.scopeAudits}. Build a concise checklist-first report with: overall checklist statuses, executive summary, findings grouped by domain/scope, next actions, and blocked or missing inputs. Preserve blocked items from discovery unchanged. Preserve discovery-to-synthesis coverage: if discovery emitted N runnable targets, account for all N target audits or explicitly note any missing audit result. Preserve explicit per-target evidence when available; do not reduce target evidence to vague references like cited above. Include a short per-target coverage table with targetId, scopeLabel, status, and evidencePaths. If a collected audit item has structured output, prefer it over raw text. Do not invent evidence that is not present."
+    }
+  ]
+}
