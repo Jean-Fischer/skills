@@ -47,6 +47,9 @@ For each hop:
 - Prefer official Angular schematics over manual text edits.
 - Treat warnings as migration signals, not noise.
 - If the app is partly migrated already, normalize it before continuing.
+- For every Angular major hop, align the Angular-adjacent package set to versions supported by that target Angular version. At minimum, verify `typescript`, `rxjs`, `zone.js`, Angular build/test tooling, Angular ESLint, and Angular Material when present.
+- For every Angular major hop, temporary stabilization may relax configuration only (for example tsconfig, lint config, test config, budgets, or diagnostics) to restore green build, lint, and test results.
+- Every temporary configuration relaxation must be reviewed after the first green pass. Remove it when there is a trivial fix; otherwise keep it only as intentional, documented migration debt.
 
 ## Baseline inspection checklist
 Before the first hop, record:
@@ -54,10 +57,33 @@ Before the first hop, record:
 - `node --version`
 - package manager version
 - current `package.json` Angular versions
+- current versions and version ranges for `typescript`, `rxjs`, `zone.js`, Angular build/test tooling, Angular ESLint, and Angular Material when present
+- whether any of those Angular-adjacent packages are pinned outside the supported range for the next target Angular major
 - whether the app is **standalone**, **NgModule-based**, or mixed
 - whether Angular Material is installed
 - whether DevExtreme / `devextreme-angular` is installed
 - whether tests are Karma/Jasmine, Vitest, or both
+
+## Compatibility alignment and temporary stabilization
+For every Angular major hop, treat package compatibility alignment as part of the migration itself, not as optional cleanup.
+
+Before calling a hop clean:
+1. Update `@angular/core` and `@angular/cli` to the next Angular major.
+2. Align `typescript`, `rxjs`, `zone.js`, Angular build/test tooling, Angular ESLint, and Angular Material when present to versions supported by that Angular major.
+3. Apply the official Angular migrations for that hop.
+4. Fix compiler, template, test, and runtime fallout.
+5. If build, lint, or test still fail, temporarily relax configuration only as a first-pass stabilization step.
+6. Record every temporary relaxation introduced, including what changed, why it was needed, and whether there is an obvious trivial fix.
+7. After the first green pass, review every recorded relaxation and remove the ones with trivial fixes.
+8. Keep any remaining relaxation only when there is no trivial fix, and document it as intentional migration debt before moving to the next hop.
+
+Typical first-pass stabilization changes may include:
+- tsconfig strictness or extended diagnostic suppressions
+- lint rule severity changes or temporary rule disables
+- test runner/configuration adjustments needed to restore green tests
+- temporary budget adjustments needed to keep verification moving
+
+Do not use this phase to justify broad production code workarounds. The purpose is to restore a stable migration baseline, then immediately review whether the introduced exceptions can be removed with low effort.
 
 ## Recommended commands
 Use the Angular CLI for updates:
@@ -99,14 +125,17 @@ Migration-relevant changes from the release notes and update guidance:
 ng update @angular/core@17 @angular/cli@17
 ```
 
-3. Apply any migrations Angular offers.
-4. If the app still uses legacy template control flow (`*ngIf`, `*ngFor`, `*ngSwitch`) and you want the built-in syntax, run the control flow schematic after the package update:
+3. Align `typescript`, `rxjs`, `zone.js`, Angular build/test tooling, Angular ESLint, and Angular Material when present to Angular 17-supported versions.
+4. Apply any migrations Angular offers.
+5. If the app still uses legacy template control flow (`*ngIf`, `*ngFor`, `*ngSwitch`) and you want the built-in syntax, run the control flow schematic after the package update:
 
 ```bash
 ng generate @angular/core:control-flow
 ```
 
-5. Fix template diagnostics, strictness issues, and any package incompatibilities surfaced by the update.
+6. Fix template diagnostics, strictness issues, and any package incompatibilities surfaced by the update.
+7. If needed, temporarily relax tsconfig, lint config, or test config to restore green build, lint, and test results.
+8. Record every temporary relaxation, then review and remove the ones with trivial fixes before declaring the hop clean.
 
 ### Watch for
 - Node 16 failures in CI or local dev
@@ -156,9 +185,12 @@ Migration-relevant changes:
 ng update @angular/core@18 @angular/cli@18
 ```
 
-3. Review the update output for any migration tasks.
-4. Fix compiler and template issues first.
-5. If the workspace uses tests that depend on timing, re-check `whenStable`, `detectChanges`, and any async assertions.
+3. Align `typescript`, `rxjs`, `zone.js`, Angular build/test tooling, Angular ESLint, and Angular Material when present to Angular 18-supported versions.
+4. Review the update output for any migration tasks.
+5. Fix compiler and template issues first.
+6. If the workspace uses tests that depend on timing, re-check `whenStable`, `detectChanges`, and any async assertions.
+7. If needed, temporarily relax tsconfig, lint config, or test config to restore green build, lint, and test results.
+8. Record every temporary relaxation, then review and remove the ones with trivial fixes before declaring the hop clean.
 
 ### Watch for
 - TypeScript 5.4 incompatibilities
@@ -208,11 +240,14 @@ Migration-relevant changes:
 ng update @angular/core@19 @angular/cli@19
 ```
 
-3. Let Angular perform the standalone migration it needs.
-4. If the project is intentionally NgModule-based, make sure declarations that Angular marks as standalone are adjusted to remain compatible with the app architecture.
-5. Fix template references that relied on `this.` for template variables.
-6. Update router error handling patterns if they used the removed `Router.errorHandler`.
-7. Revisit tests that depend on `whenStable`, `fakeAsync`, or automatic change detection.
+3. Align `typescript`, `rxjs`, `zone.js`, Angular build/test tooling, Angular ESLint, and Angular Material when present to Angular 19-supported versions.
+4. Let Angular perform the standalone migration it needs.
+5. If the project is intentionally NgModule-based, make sure declarations that Angular marks as standalone are adjusted to remain compatible with the app architecture.
+6. Fix template references that relied on `this.` for template variables.
+7. Update router error handling patterns if they used the removed `Router.errorHandler`.
+8. Revisit tests that depend on `whenStable`, `fakeAsync`, or automatic change detection.
+9. If needed, temporarily relax tsconfig, lint config, or test config to restore green build, lint, and test results.
+10. Record every temporary relaxation, then review and remove the ones with trivial fixes before declaring the hop clean.
 
 ### Watch for
 - standalone default changes in older NgModule-based apps
@@ -260,9 +295,12 @@ Migration-relevant changes:
 ng update @angular/core@20 @angular/cli@20
 ```
 
-3. Review diagnostics related to control flow, signals, and templates.
-4. Update tests that should prefer `TestBed.tick()` or more explicit async handling.
-5. If you use new signal APIs, check for any deprecation or rename warnings in the update output.
+3. Align `typescript`, `rxjs`, `zone.js`, Angular build/test tooling, Angular ESLint, and Angular Material when present to Angular 20-supported versions.
+4. Review diagnostics related to control flow, signals, and templates.
+5. Update tests that should prefer `TestBed.tick()` or more explicit async handling.
+6. If you use new signal APIs, check for any deprecation or rename warnings in the update output.
+7. If needed, temporarily relax tsconfig, lint config, or test config to restore green build, lint, and test results.
+8. Record every temporary relaxation, then review and remove the ones with trivial fixes before declaring the hop clean.
 
 ### Watch for
 - Node 18 or older toolchains still in the workspace
@@ -310,9 +348,12 @@ Migration-relevant changes:
 ng update @angular/core@21 @angular/cli@21
 ```
 
-3. Fix any remaining NgModule-era assumptions that depend on removed or tightened APIs.
-4. Check test setup carefully, especially `TestBed`, `whenStable`, fixture auto-detection, and any custom platform-location assumptions.
-5. Re-run the full validation suite and make sure no hidden runtime issues remain.
+3. Align `typescript`, `rxjs`, `zone.js`, Angular build/test tooling, Angular ESLint, and Angular Material when present to Angular 21-supported versions.
+4. Fix any remaining NgModule-era assumptions that depend on removed or tightened APIs.
+5. Check test setup carefully, especially `TestBed`, `whenStable`, fixture auto-detection, and any custom platform-location assumptions.
+6. If needed, temporarily relax tsconfig, lint config, or test config to restore green build, lint, and test results.
+7. Record every temporary relaxation, then review and remove the ones with trivial fixes before declaring the hop clean.
+8. Re-run the full validation suite and make sure no hidden runtime issues remain.
 
 ### Watch for
 - `NgModuleFactory` usage
@@ -362,10 +403,13 @@ Migration-relevant changes:
 ng update @angular/core@22 @angular/cli@22
 ```
 
-3. Review the generated `ChangeDetectionStrategy.Eager` additions and decide whether they should stay or be intentionally replaced with `OnPush` in later refactors.
-4. Fix compiler, template, and runtime fallout from the update.
-5. Recheck DevExtreme warnings, budgets, and Vitest isolation if the fixture uses them.
-6. Re-run the validation checklist before moving on.
+3. Align `typescript`, `rxjs`, `zone.js`, Angular build/test tooling, Angular ESLint, and Angular Material when present to Angular 22-supported versions.
+4. Review the generated `ChangeDetectionStrategy.Eager` additions and decide whether they should stay or be intentionally replaced with `OnPush` in later refactors.
+5. Fix compiler, template, and runtime fallout from the update.
+6. If needed, temporarily relax tsconfig, lint config, or test config to restore green build, lint, and test results.
+7. Record every temporary relaxation, then review and remove the ones with trivial fixes before declaring the hop clean.
+8. Recheck DevExtreme warnings, budgets, and Vitest isolation if the fixture uses them.
+9. Re-run the validation checklist before moving on.
 
 ### Watch for
 - components that gained explicit eager change detection
@@ -421,10 +465,12 @@ Use this when the repo already claims to be finished.
 
 ### Final-state signals
 - Angular packages are on the intended 22.x line
+- the in-scope Angular-adjacent packages (`typescript`, `rxjs`, `zone.js`, Angular build/test tooling, Angular ESLint, and Angular Material when present) are in supported ranges for that Angular line
 - `@angular/build:application` is used for build
 - `@angular/build:unit-test` is used for tests
 - `pnpm why karma` and `pnpm why inflight` are empty in a clean workspace, aside from optional peer metadata on `@angular/build`
 - build, tests, and lint all pass, or any missing lint target is documented intentionally
+- temporary configuration relaxations have been reviewed and either removed or intentionally documented
 - any Material or DevExtreme exceptions are intentional and documented
 
 ---
@@ -477,6 +523,7 @@ Use this as the exit gate for every hop:
 
 | Check | Pass criteria |
 | --- | --- |
+| Package alignment | Angular and the in-scope Angular-adjacent packages are within versions supported by the target Angular major |
 | Build | `ng build` succeeds |
 | Tests | `ng test` succeeds or failures are understood and tracked |
 | Lint | `ng lint` succeeds or issues are logged |
@@ -484,6 +531,7 @@ Use this as the exit gate for every hop:
 | UI | main route renders |
 | Material | Material controls render and interact correctly |
 | DevExtreme | DevExtreme widgets render and behave correctly |
+| Exceptions | temporary configuration relaxations were reviewed; trivial-fix items were removed; any retained items are documented |
 | Blockers | no unresolved blocker remains before the next hop |
 
 ## Suggested workflow summary
