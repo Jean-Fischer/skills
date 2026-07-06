@@ -75,19 +75,19 @@ async function runCommand(cmd, args, options = {}) {
     const stdio = options.stdio ?? ["ignore", "pipe", "pipe"];
     const child = spawn(cmd, args, { ...options, stdio });
 
-    let stdout = "";
-    let stderr = "";
+    const stdoutChunks = [];
+    const stderrChunks = [];
 
     // When stdio is "inherit", child.stdout/child.stderr will be null.
     // Guard the event handlers so we don't crash with "Cannot read properties of null (reading 'on')".
     if (child.stdout) {
       child.stdout.on("data", (d) => {
-        stdout += d.toString();
+        stdoutChunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d));
       });
     }
     if (child.stderr) {
       child.stderr.on("data", (d) => {
-        stderr += d.toString();
+        stderrChunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d));
       });
     }
 
@@ -95,6 +95,8 @@ async function runCommand(cmd, args, options = {}) {
       rejectPromise(err);
     });
     child.on("close", (code) => {
+      const stdout = Buffer.concat(stdoutChunks).toString("utf8");
+      const stderr = Buffer.concat(stderrChunks).toString("utf8");
       resolvePromise({ code, stdout, stderr });
     });
   });
@@ -227,12 +229,11 @@ function isBlacklistedPath(relPathNormalized, patterns) {
 }
 
 async function listGitFiles(sourceDir) {
-  const result = await runCommand("git", ["-C", sourceDir, "ls-files"]);
+  const result = await runCommand("git", ["-C", sourceDir, "ls-files", "-z"]);
   if (result.code !== 0) {
     throw new Error(`git ls-files failed for '${sourceDir}': ${result.stderr || result.stdout}`);
   }
-  const files = result.stdout.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  return files;
+  return result.stdout.split("\0").filter(Boolean);
 }
 
 async function mkdirp(dirPath) {
@@ -320,9 +321,14 @@ async function runCxScan({ workDir, sourceDir, outDir, projectName, branch, scan
 
   if (debug) args.push("--debug");
 
-  logInfo(`Running: cx ${args.map((a) => (a.includes(" ") ? `"${a}"` : a)).join(" ")}`);
+  const cxExecutable = process.env.CX_BIN && process.env.CX_BIN.trim() ? process.env.CX_BIN.trim() : "cx";
+  const cxPrefixArgs = process.env.CX_BIN_ARGS
+    ? JSON.parse(process.env.CX_BIN_ARGS).map((value) => asString(value))
+    : [];
+  const commandArgs = [...cxPrefixArgs, ...args];
+  logInfo(`Running: ${cxExecutable} ${commandArgs.map((a) => (a.includes(" ") ? `"${a}"` : a)).join(" ")}`);
 
-  const result = await runCommand("cx", args, { stdio: ["ignore", "inherit", "inherit"] });
+  const result = await runCommand(cxExecutable, commandArgs, { stdio: ["ignore", "inherit", "inherit"] });
   if (result.code !== 0) {
     throw new Error(`Checkmarx scan failed with exit code ${result.code}.`);
   }
