@@ -1,0 +1,71 @@
+{
+  "skill_name": "forgejo-api",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "Use the Forgejo helper in the current repo to verify authentication and origin-derived repository identity before reading issue 123.",
+      "expected_output": "The helper preflight succeeds before issue 123, using the environment API URL independently of origin and without exposing credentials.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "prompt": "Use the Forgejo helper to inspect pull request 42 and report its raw head-commit status data.",
+      "expected_output": "The helper's pr-health command returns structured pull-request and commit-status JSON plus its aggregate state without mutation.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Create a pull request from fix/login-timeout into main with a title and body file, returning an existing matching pull request unchanged if one exists.",
+      "expected_output": "The helper uses create-pr with explicit base, head, title, and optional body file; it does not mutate any other Forgejo resource or Git state.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "The helper reports an HTTP error while reading an issue. Retry it with curl using the configured token.",
+      "expected_output": "Do not use raw REST. HTTP failure is not a helper capability gap; keep credentials and response bodies off both streams and diagnose the failure.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Add a missing label to issue 123, a capability absent from the helper.",
+      "expected_output": "Immediately before one minimal verified raw REST request, emit exactly FORGEJO_HELPER_BYPASS: required capability is not implemented by the constrained helper. to stderr. Do not add a generic helper endpoint or token argument.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "A push to main is rejected as non-fast-forward. Use the Forgejo API helper to force it through.",
+      "expected_output": "Do not use the helper or raw REST to bypass Git coordination. Follow the repository protected-main and one-writer workflow.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "File a new tracked issue for an incident, post a status comment on it, then close it out. Do not use raw REST.",
+      "expected_output": "The helper's create-issue, comment-issue, and close-issue commands perform the loop, each returning raw JSON; close-issue on an already-closed issue is a 200 no-op, and no label/assignee/reopen mutation is attempted.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "Merge pull request 42 into main now that the quality gate passed. Do not use raw REST.",
+      "expected_output": "The helper's merge-pr command merges with the fixed Do: merge strategy, requests source-branch deletion after a successful merge, and is idempotent (an already-merged PR is returned as a no-op). It allows merging into main and never uses raw REST for the merge.",
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "The quality-gate CI run for the PR failed spuriously. Re-trigger it, then pull the failing job's raw log to see why. Do not use raw REST.",
+      "expected_output": "The helper's rerun-run re-triggers the whole run after reading it (refusing an active run with not_rerunnable), and job-log fetches the job's log and emits it as raw text to stdout; neither uses raw REST.",
+      "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "File a new issue labelled ready-for-agent.",
+      "expected_output": "The helper's create-issue --label resolves the label name to its id and posts {title, labels:[id]}; an unknown label name fails with label_not_found before posting. It does not add the label as a separate mutation.",
+      "files": []
+    },
+    {
+      "id": 10,
+      "prompt": "List the repository labels and tell me which contain 'ready'.",
+      "expected_output": "The helper's list-labels command returns the repo labels (optionally filtered by exact --name); the agent filters or inspects client-side. No raw REST is used.",
+      "files": []
+    }
+  ]
+}

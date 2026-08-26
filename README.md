@@ -25,6 +25,9 @@ This repository contains reusable local Pi skills.
 - `csharp-tests` — C# test standards and test-writing guidance for test code
   - Skill: `skills/csharp-tests/SKILL.md`
   - Handbook: `skills/csharp-tests/HANDBOOK.md`
+- `forgejo-api` — Constrained task-oriented Forgejo issue, pull-request, and Actions automation
+  - Skill: `skills/forgejo-api/SKILL.md`
+  - Helper: `skills/forgejo-api/forgejo_helper.py`
 - `repo-audit` — Top-level repository audit orchestrator for Angular, Angular tests, .NET, C# tests, Checkmarx, and SonarQube checks
   - Skill: `skills/repo-audit/SKILL.md`
   - Handbook: `skills/repo-audit/HANDBOOK.md`
