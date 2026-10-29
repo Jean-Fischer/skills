@@ -21,7 +21,7 @@ Run `preflight` first. It and every REST command authenticate with `GET /user`; 
 | `issue-comments <number>` | `GET /repos/{owner}/{repo}/issues/{number}/comments` paged to completion | `{items, pagination}` |
 | `pr-files <number>` | PR verification, then `GET /repos/{owner}/{repo}/pulls/{number}/files` paged to completion | `{items, pagination}` |
 | `pr-reviews <number>` | PR verification, then `GET /repos/{owner}/{repo}/pulls/{number}/reviews` paged to completion | `{items, pagination}` |
-| `job-log <run_id> <job_id>` | `GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs` (zip) after auth | Raw decompressed log text to stdout (the one non-JSON exception) |
+| `job-log <run_id> <job_id>` | `GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs` after auth | Raw log text to stdout; decompresses ZIP responses and passes through plain-text responses (the one non-JSON exception) |
 | `git-check` | none | read-only local Git diagnostics |
 
 `pr-health` preserves `pull_request`, `commit_status`, `actions_runs`, and per-run `actions_jobs` payloads. Its additive `aggregate_state` uses `failure > pending > success`; no usable gate data is `unknown`. If Actions endpoints are unavailable, the command succeeds with the remaining PR/commit health and omits Actions fields without warning.
