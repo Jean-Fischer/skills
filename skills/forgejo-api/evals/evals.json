@@ -52,7 +52,7 @@
     {
       "id": 8,
       "prompt": "The quality-gate CI run for the PR failed spuriously. Re-trigger it, then pull the failing job's raw log to see why. Do not use raw REST.",
-      "expected_output": "The helper's rerun-run re-triggers the whole run after reading it (refusing an active run with not_rerunnable), and job-log fetches the job's log and emits it as raw text to stdout; neither uses raw REST.",
+      "expected_output": "The helper's rerun-run re-triggers the whole run after reading it (refusing an active run with not_rerunnable), and job-log fetches the job's log and emits it as raw text to stdout, whether Forgejo returned ZIP or plain text; neither uses raw REST.",
       "files": []
     },
     {
@@ -65,6 +65,12 @@
       "id": 10,
       "prompt": "List the repository labels and tell me which contain 'ready'.",
       "expected_output": "The helper's list-labels command returns the repo labels (optionally filtered by exact --name); the agent filters or inspects client-side. No raw REST is used.",
+      "files": []
+    },
+    {
+      "id": 11,
+      "prompt": "Forgejo returned this job log as plain text instead of a ZIP archive. Read the job's log with the helper and summarize the failure.",
+      "expected_output": "The helper's job-log command passes through plain-text logs to stdout, as it does for decompressed ZIP logs. No raw REST fallback is needed.",
       "files": []
     }
   ]

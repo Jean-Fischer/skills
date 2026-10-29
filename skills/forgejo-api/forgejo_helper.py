@@ -157,7 +157,7 @@ class ForgejoClient:
             raise HelperError("response_error", "Forgejo user response was invalid")
         return user
 
-    def request_raw(self, method: str, path: str) -> bytes:
+    def request_raw(self, method: str, path: str) -> tuple[bytes, str | None]:
         request = Request(
             f"{self.settings.api_url}{path}",
             method=method,
@@ -168,7 +168,7 @@ class ForgejoClient:
         )
         try:
             with urlopen(request, timeout=60) as response:
-                return response.read()
+                return response.read(), response.headers.get("Content-Type")
         except HTTPError as error:
             raise HelperError(
                 "http_error", "Forgejo request failed", status=error.code
@@ -767,21 +767,31 @@ def command_job_log(args: argparse.Namespace) -> None:
     client, repository = api_context()
     require_positive_number(args.run_id)
     require_positive_number(args.job_id)
-    archive_bytes = client.request_raw(
+    log_bytes, content_type = client.request_raw(
         "GET", f"{repository_path(repository)}/actions/jobs/{args.job_id}/logs"
     )
-    try:
-        with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
-            lines = [
-                archive.read(name).decode("utf-8", errors="replace")
-                for name in archive.namelist()
-                if not name.endswith("/")
-            ]
-    except (zipfile.BadZipFile, OSError) as error:
-        raise HelperError(
-            "response_error", "Forgejo job log was not a readable archive"
-        ) from error
-    sys.stdout.write("".join(lines))
+    if zipfile.is_zipfile(io.BytesIO(log_bytes)):
+        try:
+            with zipfile.ZipFile(io.BytesIO(log_bytes)) as archive:
+                lines = [
+                    archive.read(name).decode("utf-8", errors="replace")
+                    for name in archive.namelist()
+                    if not name.endswith("/")
+                ]
+        except (zipfile.BadZipFile, OSError, RuntimeError) as error:
+            raise HelperError(
+                "response_error", "Forgejo job log was not readable"
+            ) from error
+        log_text = "".join(lines)
+    elif (
+        content_type is not None
+        and content_type.split(";", 1)[0].strip().lower() == "text/plain"
+    ):
+        # Forgejo versions may return the log body directly instead of a ZIP.
+        log_text = log_bytes.decode("utf-8", errors="replace")
+    else:
+        raise HelperError("response_error", "Forgejo job log format was not recognized")
+    sys.stdout.write(log_text)
 
 
 def parser() -> argparse.ArgumentParser:
