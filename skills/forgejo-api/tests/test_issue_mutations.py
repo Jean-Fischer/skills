@@ -501,6 +501,18 @@ class IssueMutationCliTests(unittest.TestCase):
             any(request[0] == "PATCH" for request in self.fixture.requests)
         )
 
+    def test_unknown_label_fails_before_add_issue_label_mutation(self) -> None:
+        result = self.fixture.run_helper("add-issue-label", "7", "--label", "missing")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("label_not_found", result.stderr)
+        self.assertFalse(
+            any(
+                request[0] in {"POST", "PATCH", "DELETE"}
+                for request in self.fixture.requests
+            )
+        )
+
     def test_unknown_label_fails_without_issue_mutation(self) -> None:
         result = self.fixture.run_helper(
             "remove-issue-label", "7", "--label", "missing"

@@ -679,20 +679,7 @@ def command_add_issue_label(args: argparse.Namespace) -> None:
     client, repository = api_context()
     require_positive_number(args.number)
     require_non_blank(args.label, "label name")
-    matches = [
-        item
-        for item in labels_for_repository(client, repository)
-        if isinstance(item, dict) and item.get("name") == args.label
-    ]
-    if not matches:
-        raise HelperError(
-            "label_not_found", "no repository label matched the requested name"
-        )
-    if len(matches) > 1 or not isinstance(matches[0].get("id"), int):
-        raise HelperError(
-            "ambiguous_label",
-            "repository label name did not identify exactly one label",
-        )
+    label_record = repository_label_for_name(client, repository, args.label)
     current = client.request(
         "GET", f"{repository_path(repository)}/issues/{args.number}"
     )
@@ -704,7 +691,7 @@ def command_add_issue_label(args: argparse.Namespace) -> None:
         for item in labels
     ):
         raise HelperError("response_error", "Forgejo issue labels response was invalid")
-    label_id = matches[0]["id"]
+    label_id = label_record["id"]
     existing_ids = [item["id"] for item in labels]
     if label_id in existing_ids:
         output(
@@ -732,21 +719,8 @@ def command_remove_issue_label(args: argparse.Namespace) -> None:
     client, repository = api_context()
     require_positive_number(args.number)
     require_non_blank(args.label, "label name")
-    matches = [
-        item
-        for item in labels_for_repository(client, repository)
-        if isinstance(item, dict) and item.get("name") == args.label
-    ]
-    if not matches:
-        raise HelperError(
-            "label_not_found", "no repository label matched the requested name"
-        )
-    if len(matches) > 1 or not isinstance(matches[0].get("id"), int):
-        raise HelperError(
-            "ambiguous_label",
-            "repository label name did not identify exactly one label",
-        )
-    label_id = matches[0]["id"]
+    label_record = repository_label_for_name(client, repository, args.label)
+    label_id = label_record["id"]
     issue_path = f"{repository_path(repository)}/issues/{args.number}"
     current = client.request("GET", issue_path)
     if not isinstance(current, dict):
@@ -861,6 +835,26 @@ def labels_for_repository(client: ForgejoClient, repository: Repository) -> list
         if len(page_labels) < 100:
             return labels
     raise HelperError("response_error", "Forgejo label-list lookup exceeded page limit")
+
+
+def repository_label_for_name(
+    client: ForgejoClient, repository: Repository, name: str
+) -> dict[str, Any]:
+    matches = [
+        label
+        for label in labels_for_repository(client, repository)
+        if isinstance(label, dict) and label.get("name") == name
+    ]
+    if not matches:
+        raise HelperError(
+            "label_not_found", "no repository label matched the requested name"
+        )
+    if len(matches) > 1 or not isinstance(matches[0].get("id"), int):
+        raise HelperError(
+            "ambiguous_label",
+            "repository label name did not identify exactly one label",
+        )
+    return matches[0]
 
 
 def command_git_check(_: argparse.Namespace) -> None:
