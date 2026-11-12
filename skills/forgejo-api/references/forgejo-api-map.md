@@ -6,7 +6,7 @@ The constrained helper is the v1 Forgejo REST surface:
 python3 forgejo_helper.py <command>
 ```
 
-Run `preflight` first. It and every REST command authenticate with `GET /user`; `GITEA_SERVER_URL` alone selects the API server, while `origin` alone supplies `owner/repo`. The helper accepts credentials only through `GITEA_SERVER_URL` and `GITEA_SERVER_TOKEN`, needs no `jq`, never reads cache state by default, and has no Git mutation surface. Successful commands write JSON (or `null` for an empty successful response) to stdout; failures write sanitized JSON to stderr and return non-zero without response-body or credential leakage. Negative-case argument handling (blank titles, non-positive issue numbers, missing required arguments) reports a sanitized `arguments_error`.
+Run `preflight` first. It and every REST command authenticate with `GET /user`; `GITEA_SERVER_URL` alone selects the API server, while `origin` alone supplies `owner/repo`. The helper accepts credentials only through `GITEA_SERVER_URL` and `GITEA_SERVER_TOKEN`, needs no `jq`, never reads cache state by default, and has no Git mutation surface. Successful commands write JSON (or `null` for an empty successful response) to stdout; failures write sanitized JSON to stderr and return non-zero without response-body or credential leakage. Negative-case argument handling (blank titles, non-positive identifiers, missing required arguments) reports a sanitized `arguments_error`.
 
 ## Read commands
 
@@ -42,13 +42,29 @@ Run `preflight` first. It and every REST command authenticate with `GET /user`; 
 
 `create-issue --title <title> [--body-file <body>] [--label <name>]` posts `{title, body?, labels?}` to `/repos/{owner}/{repo}/issues` and returns the created issue JSON. The title is required and must be non-blank. The optional `--label <name>` resolves the label name to its id via the repo label list; an unknown name fails with a sanitized `label_not_found` before any issue is posted. Each invocation posts exactly one issue; it does not deduplicate (issues have no deterministic natural key).
 
+### `create-label`
+
+`create-label --name <name> --color <RRGGBB> [--description <text>]` creates one repository label at `/repos/{owner}/{repo}/labels`. Color accepts six hexadecimal digits, optionally prefixed with `#`, and is normalized to lowercase without the prefix. The command checks for an exact name first: if the existing label has the requested color and any supplied description, it returns `{created:false,label}` unchanged; a same-name label with different properties fails with `label_exists` and is never updated. A `409` triggers one re-read to handle a concurrent matching creation. Successful creation returns `{created:true,label}`.
+
 ### `close-issue`
 
 `close-issue <number>` sends `PATCH /repos/{owner}/{repo}/issues/{number}` with `{"state":"closed"}` and returns the updated issue JSON. It is naturally idempotent: closing an already-closed issue returns the same `200` JSON without error. It is strictly close-only (no reopen); a nonexistent issue returns a sanitized `http_error` 404.
 
+### `update-issue`
+
+`update-issue <number> [--title <title>] [--body <text> | --body-file <path>]` reads `/repos/{owner}/{repo}/issues/{number}`, rejects pull requests with `wrong_object_type`, then patches only the supplied title and/or body fields and returns the updated issue JSON. At least one field is required; title must be non-blank. An explicitly empty body is allowed to clear the body. It never changes issue state, labels, assignees, or other fields.
+
+### `update-pr`
+
+`update-pr <number> [--title <title>] [--body <text> | --body-file <path>]` verifies the number is a pull request, then patches only supplied title/body fields at `/repos/{owner}/{repo}/pulls/{number}` and returns the updated PR JSON. At least one field is required; title must be non-blank. An explicitly empty body is allowed to clear the body. It does not change PR state, reviewers, branches, or other fields.
+
 ### `comment-issue`
 
 `comment-issue <number> --body <text>` or `comment-issue <number> --body-file <path>` (exactly one required) posts `{body}` to `/repos/{owner}/{repo}/issues/{number}/comments` and returns the created comment JSON. Each invocation posts exactly one comment; comments on closed issues are allowed (no state check).
+
+### `edit-issue-comment`
+
+`edit-issue-comment <number> <comment_id> --body <text>` or `--body-file <path>` (exactly one required) pages through the issue's comments and verifies that the comment ID belongs to that issue before patching `/repos/{owner}/{repo}/issues/comments/{comment_id}` with `{body}`. It returns the updated comment JSON. A comment outside that issue fails with `comment_not_found` before mutation; an empty body may clear the comment.
 
 ### `merge-pr`
 
@@ -62,9 +78,13 @@ Run `preflight` first. It and every REST command authenticate with `GET /user`; 
 
 `add-issue-label <number> --label <name>` resolves one exact, case-sensitive repository label, reads current issue/PR labels, and appends the label only when absent. It posts the complete label ID set to `/repos/{owner}/{repo}/issues/{number}/labels`, preserving existing labels. It returns `changed: false` for an existing label and `changed: true` after mutation. Missing and ambiguous exact names fail before mutation.
 
+### `remove-issue-label`
+
+`remove-issue-label <number> --label <name>` resolves one exact, case-sensitive repository label and reads the current issue/PR labels. If absent, it returns `changed: false` without mutation. Otherwise it deletes only that label ID at `/repos/{owner}/{repo}/issues/{number}/labels/{label_id}`, re-reads the issue, and verifies that the label is gone. It returns `changed: true` with the remaining labels. Missing or ambiguous names fail before mutation; other labels are preserved.
+
 ## Excluded mutations
 
-Label removal/administration, milestone, assignee, update/reopen, release, organization, review, and standalone deletion mutations are outside the v1 helper surface. `merge-pr` is the reviewed exception for its coupled post-merge source-branch deletion. Protected-branch rejection and non-fast-forward are Git coordination failures; follow the repository's protected-branch and one-writer policy, not an API bypass.
+Repository label updates/deletion/administration, milestone, assignee, reopening and issue-state changes other than close, PR changes beyond title/body updates and merge, issue dependencies, release, organization, review, and standalone deletion mutations are outside the v1 helper surface. `merge-pr` is the reviewed exception for its coupled post-merge source-branch deletion. Protected-branch rejection and non-fast-forward are Git coordination failures; follow the repository's protected-branch and one-writer policy, not an API bypass.
 
 ## Capability fallback
 

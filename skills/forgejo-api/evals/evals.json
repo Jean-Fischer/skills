@@ -27,7 +27,7 @@
     },
     {
       "id": 4,
-      "prompt": "Add a missing label to issue 123, a capability absent from the helper.",
+      "prompt": "Delete a repository label, a capability absent from the helper.",
       "expected_output": "Immediately before one minimal verified raw REST request, emit exactly FORGEJO_HELPER_BYPASS: required capability is not implemented by the constrained helper. to stderr. Do not add a generic helper endpoint or token argument.",
       "files": []
     },
@@ -71,6 +71,36 @@
       "id": 11,
       "prompt": "Forgejo returned this job log as plain text instead of a ZIP archive. Read the job's log with the helper and summarize the failure.",
       "expected_output": "The helper's job-log command passes through plain-text logs to stdout, as it does for decompressed ZIP logs. No raw REST fallback is needed.",
+      "files": []
+    },
+    {
+      "id": 12,
+      "prompt": "Update issue 123's title and body without changing its state, then clear its body if requested later.",
+      "expected_output": "Use update-issue with only the requested --title and/or --body/--body-file fields. It rejects an empty title, allows an explicitly empty body, and never changes issue state or unrelated fields.",
+      "files": []
+    },
+    {
+      "id": 13,
+      "prompt": "Edit comment 456 on issue 123, but do not risk changing a comment from another issue.",
+      "expected_output": "Use edit-issue-comment 123 456 with exactly one body input. The helper verifies comment 456 appears on issue 123 before PATCH; a comment from another issue fails with comment_not_found without mutation.",
+      "files": []
+    },
+    {
+      "id": 14,
+      "prompt": "Remove the status:blocked label from issue 123 without disturbing its other labels.",
+      "expected_output": "Use remove-issue-label with the exact label name. It no-ops when already absent, otherwise deletes only the matching label ID and verifies the remaining issue labels; it does not use raw REST.",
+      "files": []
+    },
+    {
+      "id": 15,
+      "prompt": "Update a pull request title and body without changing its state or reviewers.",
+      "expected_output": "Use update-pr with only supplied --title and/or --body/--body-file fields. The helper verifies the target is a pull request, rejects blank titles, allows clearing the body, and does not change state or other fields.",
+      "files": []
+    },
+    {
+      "id": 16,
+      "prompt": "Create the repository label wayfinder:prototype with color c5def5 and its description.",
+      "expected_output": "Use create-label with explicit name, color, and optional description. It normalizes six-digit hex color, returns an exact existing match unchanged, and refuses to update a same-name label with different properties; no raw REST is used.",
       "files": []
     }
   ]
