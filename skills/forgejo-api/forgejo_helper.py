@@ -437,6 +437,41 @@ def command_close_issue(args: argparse.Namespace) -> None:
     )
 
 
+def title_body_payload(args: argparse.Namespace, object_name: str) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if args.title is not None:
+        require_non_blank(args.title, f"{object_name} title")
+        payload["title"] = args.title
+    if args.body is not None and args.body_file is not None:
+        raise HelperError(
+            "arguments_error", "provide at most one of --body or --body-file"
+        )
+    if args.body is not None:
+        payload["body"] = args.body
+    elif args.body_file is not None:
+        payload["body"] = read_optional_body_file(args.body_file)
+    if not payload:
+        raise HelperError(
+            "arguments_error", "provide at least one of --title, --body, or --body-file"
+        )
+    return payload
+
+
+def command_update_issue(args: argparse.Namespace) -> None:
+    payload = title_body_payload(args, "issue")
+    client, repository = api_context()
+    require_positive_number(args.number)
+    issue_path = f"{repository_path(repository)}/issues/{args.number}"
+    current = client.request("GET", issue_path)
+    if not isinstance(current, dict):
+        raise HelperError("response_error", "Forgejo issue response was invalid")
+    if current.get("pull_request") is not None:
+        raise HelperError(
+            "wrong_object_type", "update-issue does not edit pull requests"
+        )
+    output(client.request("PATCH", issue_path, payload))
+
+
 def command_comment_issue(args: argparse.Namespace) -> None:
     client, repository = api_context()
     require_positive_number(args.number)
@@ -506,6 +541,53 @@ def command_issue_comments(args: argparse.Namespace) -> None:
     )
 
 
+def command_edit_issue_comment(args: argparse.Namespace) -> None:
+    if args.body is not None and args.body_file is not None:
+        raise HelperError(
+            "arguments_error", "provide exactly one of --body or --body-file"
+        )
+    if args.body is None and args.body_file is None:
+        raise HelperError(
+            "arguments_error", "provide exactly one of --body or --body-file"
+        )
+    body = (
+        args.body if args.body is not None else read_optional_body_file(args.body_file)
+    )
+    client, repository = api_context()
+    require_positive_number(args.number)
+    if args.comment_id < 1:
+        raise HelperError("arguments_error", "comment ids must be positive integers")
+    comments, _ = paged_list(
+        client, repository, f"/issues/{args.number}/comments", "issue-comment-list"
+    )
+    if any(
+        not isinstance(comment, dict) or not isinstance(comment.get("id"), int)
+        for comment in comments
+    ):
+        raise HelperError(
+            "response_error", "Forgejo issue-comment-list response was invalid"
+        )
+    matches = [comment for comment in comments if comment["id"] == args.comment_id]
+    if not matches:
+        raise HelperError(
+            "comment_not_found", "comment does not belong to the requested issue"
+        )
+    if len(matches) != 1:
+        raise HelperError(
+            "ambiguous_comment", "comment id did not identify exactly one comment"
+        )
+    updated = client.request(
+        "PATCH",
+        f"{repository_path(repository)}/issues/comments/{args.comment_id}",
+        {"body": body},
+    )
+    if not isinstance(updated, dict) or updated.get("id") != args.comment_id:
+        raise HelperError(
+            "response_error", "Forgejo issue-comment response was invalid"
+        )
+    output(updated)
+
+
 def pull_request_for_command(
     client: ForgejoClient, repository: Repository, number: int
 ) -> dict[str, Any]:
@@ -519,6 +601,18 @@ def pull_request_for_command(
     if isinstance(issue, dict):
         raise HelperError("wrong_object_type", "requested number is not a pull request")
     raise HelperError("http_error", "Forgejo request failed", status=404)
+
+
+def command_update_pr(args: argparse.Namespace) -> None:
+    payload = title_body_payload(args, "pull-request")
+    client, repository = api_context()
+    require_positive_number(args.number)
+    pull_request_for_command(client, repository, args.number)
+    output(
+        client.request(
+            "PATCH", f"{repository_path(repository)}/pulls/{args.number}", payload
+        )
+    )
 
 
 def command_pr_files(args: argparse.Namespace) -> None:
@@ -585,20 +679,7 @@ def command_add_issue_label(args: argparse.Namespace) -> None:
     client, repository = api_context()
     require_positive_number(args.number)
     require_non_blank(args.label, "label name")
-    matches = [
-        item
-        for item in labels_for_repository(client, repository)
-        if isinstance(item, dict) and item.get("name") == args.label
-    ]
-    if not matches:
-        raise HelperError(
-            "label_not_found", "no repository label matched the requested name"
-        )
-    if len(matches) > 1 or not isinstance(matches[0].get("id"), int):
-        raise HelperError(
-            "ambiguous_label",
-            "repository label name did not identify exactly one label",
-        )
+    label_record = repository_label_for_name(client, repository, args.label)
     current = client.request(
         "GET", f"{repository_path(repository)}/issues/{args.number}"
     )
@@ -610,7 +691,7 @@ def command_add_issue_label(args: argparse.Namespace) -> None:
         for item in labels
     ):
         raise HelperError("response_error", "Forgejo issue labels response was invalid")
-    label_id = matches[0]["id"]
+    label_id = label_record["id"]
     existing_ids = [item["id"] for item in labels]
     if label_id in existing_ids:
         output(
@@ -631,6 +712,54 @@ def command_add_issue_label(args: argparse.Namespace) -> None:
         raise HelperError("response_error", "Forgejo issue-label response was invalid")
     output(
         {"number": args.number, "label": args.label, "changed": True, "labels": result}
+    )
+
+
+def command_remove_issue_label(args: argparse.Namespace) -> None:
+    client, repository = api_context()
+    require_positive_number(args.number)
+    require_non_blank(args.label, "label name")
+    label_record = repository_label_for_name(client, repository, args.label)
+    label_id = label_record["id"]
+    issue_path = f"{repository_path(repository)}/issues/{args.number}"
+    current = client.request("GET", issue_path)
+    if not isinstance(current, dict):
+        raise HelperError("response_error", "Forgejo issue response was invalid")
+    labels = current.get("labels")
+    if not isinstance(labels, list) or any(
+        not isinstance(item, dict) or not isinstance(item.get("id"), int)
+        for item in labels
+    ):
+        raise HelperError("response_error", "Forgejo issue labels response was invalid")
+    if label_id not in [item["id"] for item in labels]:
+        output(
+            {
+                "number": args.number,
+                "label": args.label,
+                "changed": False,
+                "labels": labels,
+            }
+        )
+        return
+    client.request("DELETE", f"{issue_path}/labels/{label_id}")
+    updated = client.request("GET", issue_path)
+    if not isinstance(updated, dict) or not isinstance(updated.get("labels"), list):
+        raise HelperError("response_error", "Forgejo issue-label response was invalid")
+    updated_labels = updated["labels"]
+    if any(
+        not isinstance(item, dict) or not isinstance(item.get("id"), int)
+        for item in updated_labels
+    ):
+        raise HelperError("response_error", "Forgejo issue-label response was invalid")
+    if label_id in [item["id"] for item in updated_labels]:
+        raise HelperError("response_error", "Forgejo issue label was not removed")
+    output(
+        {
+            "number": args.number,
+            "label": args.label,
+            "changed": True,
+            "labels": updated_labels,
+        }
     )
 
 
@@ -708,6 +837,26 @@ def labels_for_repository(client: ForgejoClient, repository: Repository) -> list
     raise HelperError("response_error", "Forgejo label-list lookup exceeded page limit")
 
 
+def repository_label_for_name(
+    client: ForgejoClient, repository: Repository, name: str
+) -> dict[str, Any]:
+    matches = [
+        label
+        for label in labels_for_repository(client, repository)
+        if isinstance(label, dict) and label.get("name") == name
+    ]
+    if not matches:
+        raise HelperError(
+            "label_not_found", "no repository label matched the requested name"
+        )
+    if len(matches) > 1 or not isinstance(matches[0].get("id"), int):
+        raise HelperError(
+            "ambiguous_label",
+            "repository label name did not identify exactly one label",
+        )
+    return matches[0]
+
+
 def command_git_check(_: argparse.Namespace) -> None:
     repository = repository_from_origin()
     branch = git_output("branch", "--show-current")
@@ -731,6 +880,90 @@ def command_list_labels(args: argparse.Namespace) -> None:
             if isinstance(item, dict) and item.get("name") == args.name
         ]
     output(labels)
+
+
+def normalized_label_color(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    color = value[1:] if value.startswith("#") else value
+    return color.lower() if re.fullmatch(r"[0-9a-fA-F]{6}", color) else None
+
+
+def matching_label_for_creation(
+    labels: list[Any], name: str, color: str, description: str | None
+) -> dict[str, Any] | None:
+    matches = [
+        label
+        for label in labels
+        if isinstance(label, dict) and label.get("name") == name
+    ]
+    if not matches:
+        return None
+    if len(matches) != 1 or not isinstance(matches[0].get("id"), int):
+        raise HelperError(
+            "ambiguous_label",
+            "repository label name did not identify exactly one label",
+        )
+    label = matches[0]
+    if normalized_label_color(label.get("color")) != color or (
+        description is not None and label.get("description", "") != description
+    ):
+        raise HelperError(
+            "label_exists", "repository label exists with different properties"
+        )
+    return label
+
+
+def command_create_label(args: argparse.Namespace) -> None:
+    require_non_blank(args.name, "label name")
+    color = normalized_label_color(args.color)
+    if color is None:
+        raise HelperError(
+            "arguments_error", "label color must be six-digit hexadecimal"
+        )
+    client, repository = api_context()
+    existing = matching_label_for_creation(
+        labels_for_repository(client, repository),
+        args.name,
+        color,
+        args.description,
+    )
+    if existing is not None:
+        output({"created": False, "label": existing})
+        return
+
+    payload: dict[str, Any] = {"name": args.name, "color": color}
+    if args.description is not None:
+        payload["description"] = args.description
+    try:
+        created = client.request(
+            "POST", f"{repository_path(repository)}/labels", payload
+        )
+    except HelperError as error:
+        if error.code != "http_error" or error.status != 409:
+            raise
+        existing = matching_label_for_creation(
+            labels_for_repository(client, repository),
+            args.name,
+            color,
+            args.description,
+        )
+        if existing is None:
+            raise
+        output({"created": False, "label": existing})
+        return
+    if (
+        not isinstance(created, dict)
+        or not isinstance(created.get("id"), int)
+        or created.get("name") != args.name
+        or normalized_label_color(created.get("color")) != color
+        or (
+            args.description is not None
+            and created.get("description", "") != args.description
+        )
+    ):
+        raise HelperError("response_error", "Forgejo label response was invalid")
+    output({"created": True, "label": created})
 
 
 def command_rerun_run(args: argparse.Namespace) -> None:
@@ -820,11 +1053,29 @@ def parser() -> argparse.ArgumentParser:
     close_issue = commands.add_parser("close-issue")
     close_issue.add_argument("number", type=int)
     close_issue.set_defaults(handler=command_close_issue)
+    update_issue = commands.add_parser("update-issue")
+    update_issue.add_argument("number", type=int)
+    update_issue.add_argument("--title")
+    update_issue.add_argument("--body")
+    update_issue.add_argument("--body-file")
+    update_issue.set_defaults(handler=command_update_issue)
+    update_pr = commands.add_parser("update-pr")
+    update_pr.add_argument("number", type=int)
+    update_pr.add_argument("--title")
+    update_pr.add_argument("--body")
+    update_pr.add_argument("--body-file")
+    update_pr.set_defaults(handler=command_update_pr)
     comment_issue = commands.add_parser("comment-issue")
     comment_issue.add_argument("number", type=int)
     comment_issue.add_argument("--body")
     comment_issue.add_argument("--body-file")
     comment_issue.set_defaults(handler=command_comment_issue)
+    edit_issue_comment = commands.add_parser("edit-issue-comment")
+    edit_issue_comment.add_argument("number", type=int)
+    edit_issue_comment.add_argument("comment_id", type=int)
+    edit_issue_comment.add_argument("--body")
+    edit_issue_comment.add_argument("--body-file")
+    edit_issue_comment.set_defaults(handler=command_edit_issue_comment)
     issue_comments = commands.add_parser("issue-comments")
     issue_comments.add_argument("number", type=int)
     issue_comments.set_defaults(handler=command_issue_comments)
@@ -838,6 +1089,10 @@ def parser() -> argparse.ArgumentParser:
     add_issue_label.add_argument("number", type=int)
     add_issue_label.add_argument("--label", required=True)
     add_issue_label.set_defaults(handler=command_add_issue_label)
+    remove_issue_label = commands.add_parser("remove-issue-label")
+    remove_issue_label.add_argument("number", type=int)
+    remove_issue_label.add_argument("--label", required=True)
+    remove_issue_label.set_defaults(handler=command_remove_issue_label)
     list_issues = commands.add_parser("list-issues")
     list_issues.add_argument(
         "--state", choices=("open", "closed", "all"), default="open"
@@ -849,6 +1104,11 @@ def parser() -> argparse.ArgumentParser:
     list_labels = commands.add_parser("list-labels")
     list_labels.add_argument("--name")
     list_labels.set_defaults(handler=command_list_labels)
+    create_label = commands.add_parser("create-label")
+    create_label.add_argument("--name", required=True)
+    create_label.add_argument("--color", required=True)
+    create_label.add_argument("--description")
+    create_label.set_defaults(handler=command_create_label)
     rerun_run = commands.add_parser("rerun-run")
     rerun_run.add_argument("run_id", type=int)
     rerun_run.set_defaults(handler=command_rerun_run)
