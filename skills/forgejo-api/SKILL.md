@@ -11,9 +11,9 @@ Use the bundled helper as the default and only v1 REST interface; do not start a
 python3 forgejo_helper.py preflight
 ```
 
-`preflight` is required before a REST workflow. It authenticates with `GET /user`; each REST command also authenticates before its target request. The helper reads only `GITEA_SERVER_URL` and `GITEA_SERVER_TOKEN` from its environment. The API server URL is independent of the SSH/HTTPS host in `origin`, which supplies only `owner/repo`. It needs no `jq`.
+`preflight` is required before a REST workflow. It authenticates with `GET /user`; each REST command also authenticates before its target request. The helper reads only `GITEA_SERVER_URL` and `GITEA_SERVER_TOKEN` from its environment. The API server URL is independent of the SSH/HTTPS host in `origin`, which supplies only `owner/repo`; set `GITEA_SERVER_URL` to the server root, and the helper appends `/api/v1`. It needs no `jq`.
 
-Never pass a token as a CLI argument, print or persist one, infer an API URL from Git, or import the cache as a normal-workflow default. Successful JSON (including an empty/204 response as `null`) goes only to stdout. Sanitized non-zero errors go only to stderr; do not print response bodies or either environment value.
+Never pass a token as a CLI argument, print or persist one, infer an API URL from Git, or import the cache as a normal-workflow default. Successful JSON (including an empty/204 response as `null`) goes only to stdout. Helper errors remain sanitized. For explicitly authorized diagnosis, inspect only the smallest relevant response/log payload in memory and report a sanitized finding; never print or persist raw bodies, credentials, or either environment value.
 
 ## Commands
 
@@ -36,6 +36,6 @@ Raw REST is permitted only when the required capability is not implemented by th
 printf '%s\n' 'FORGEJO_HELPER_BYPASS: required capability is not implemented by the constrained helper.' >&2
 ```
 
-The notice does not authorize a fallback for configuration, authentication, origin, or HTTP failures. A fallback must not become a reusable generic client; add a reviewed helper command as follow-up work.
+The notice does not authorize a fallback for configuration, authentication, origin, or HTTP failures. For an authorized diagnosis of a failed fallback, inspect only the relevant error detail from that same response before stopping; do not retry until the cause is understood. A fallback must not become a reusable generic client; add a reviewed helper command as follow-up work.
 
 See [the command map](references/forgejo-api-map.md) for response contracts and the audited boundary.
