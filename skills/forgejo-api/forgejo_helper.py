@@ -58,6 +58,14 @@ class Settings:
     token: str
 
 
+@dataclass
+class ActionsRunRecord:
+    run: dict[str, Any]
+    jobs: dict[int, Any]
+    unidentified_jobs: list[Any]
+    jobs_complete: bool = False
+
+
 def settings_from_environment() -> Settings:
     api_url = os.environ.get("GITEA_SERVER_URL")
     token = os.environ.get("GITEA_SERVER_TOKEN")
@@ -452,15 +460,15 @@ def actions_collection(
     return items, False, "response_error", False
 
 
-def run_is_resolved(record: dict[str, Any]) -> bool:
-    if not record["jobs_complete"] or actions_outcome(record["run"]) == "pending":
+def run_is_resolved(record: ActionsRunRecord) -> bool:
+    if not record.jobs_complete or actions_outcome(record.run) == "pending":
         return False
-    return all(actions_outcome(job) != "pending" for job in record["jobs"].values())
+    return all(actions_outcome(job) != "pending" for job in record.jobs.values())
 
 
 def actions_wait_result(
     head_sha: str,
-    records: dict[int, dict[str, Any]],
+    records: dict[int, ActionsRunRecord],
     unidentified_runs: list[Any],
     *,
     timed_out: bool,
@@ -470,13 +478,12 @@ def actions_wait_result(
     runs: list[dict[str, Any]] = []
     outcomes: list[str] = []
     for run_id, record in records.items():
-        run_state = actions_outcome(record["run"])
+        run_state = actions_outcome(record.run)
         jobs = [
-            {"job": job, "state": actions_outcome(job)}
-            for job in record["jobs"].values()
+            {"job": job, "state": actions_outcome(job)} for job in record.jobs.values()
         ]
         jobs.extend(
-            {"job": job, "state": "unknown"} for job in record["unidentified_jobs"]
+            {"job": job, "state": "unknown"} for job in record.unidentified_jobs
         )
         job_states = [job["state"] for job in jobs]
         if run_state == "failure" or "failure" in job_states:
@@ -491,7 +498,7 @@ def actions_wait_result(
             run_state == "success"
             and jobs
             and all(state == "success" for state in job_states)
-            and record["jobs_complete"]
+            and record.jobs_complete
         ):
             run_result = "success"
         else:
@@ -500,11 +507,11 @@ def actions_wait_result(
         runs.append(
             {
                 "id": run_id,
-                "run": record["run"],
+                "run": record.run,
                 "run_state": run_state,
                 "aggregate_state": run_result,
                 "jobs": jobs,
-                "jobs_complete": record["jobs_complete"],
+                "jobs_complete": record.jobs_complete,
             }
         )
     if unidentified_runs:
@@ -547,7 +554,7 @@ def wait_for_actions(
 ) -> dict[str, Any]:
     deadline = time.monotonic() + timeout_seconds
     runs_endpoint = f"{repository_path(repository)}/actions/runs"
-    records: dict[int, dict[str, Any]] = {}
+    records: dict[int, ActionsRunRecord] = {}
     unidentified_runs: list[Any] = []
     quiet_since: float | None = None
     error: str | None = None
@@ -584,15 +591,14 @@ def wait_for_actions(
                 continue
             run_id = run["id"]
             if run_id not in records:
-                records[run_id] = {
-                    "run": run,
-                    "jobs": {},
-                    "unidentified_jobs": [],
-                    "jobs_complete": False,
-                }
+                records[run_id] = ActionsRunRecord(
+                    run=run,
+                    jobs={},
+                    unidentified_jobs=[],
+                )
                 new_records = True
             else:
-                records[run_id]["run"] = run
+                records[run_id].run = run
         if malformed_run:
             error = "response_error"
             break
@@ -623,11 +629,11 @@ def wait_for_actions(
                     unidentified_jobs.append(job)
                     continue
                 latest_jobs[job_id] = job
-                if job_id not in record["jobs"]:
+                if job_id not in record.jobs:
                     new_jobs = True
-            record["jobs"] = latest_jobs
-            record["unidentified_jobs"] = unidentified_jobs
-            record["jobs_complete"] = jobs_complete
+            record.jobs = latest_jobs
+            record.unidentified_jobs = unidentified_jobs
+            record.jobs_complete = jobs_complete
             if job_timeout:
                 timed_out = True
                 break
