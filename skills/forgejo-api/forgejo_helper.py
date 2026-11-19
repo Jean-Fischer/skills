@@ -66,6 +66,14 @@ class ActionsRunRecord:
     jobs_complete: bool = False
 
 
+@dataclass(frozen=True)
+class ActionsCollectionResult:
+    items: list[Any]
+    complete: bool
+    error: str | None = None
+    timed_out: bool = False
+
+
 def settings_from_environment() -> Settings:
     api_url = os.environ.get("GITEA_SERVER_URL")
     token = os.environ.get("GITEA_SERVER_TOKEN")
@@ -422,23 +430,30 @@ def actions_collection(
     collection_key: str,
     deadline: float,
     query_parameters: dict[str, str] | None = None,
-) -> tuple[list[Any], bool, str | None, bool]:
+) -> ActionsCollectionResult:
     items: list[Any] = []
     for page in range(1, 101):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            return items, False, None, True
+            return ActionsCollectionResult(items, complete=False, timed_out=True)
         query = urlencode(
             {"limit": ACTIONS_PAGE_SIZE, "page": page, **(query_parameters or {})}
         )
         try:
             payload = client.request("GET", f"{endpoint}?{query}", timeout=remaining)
         except HelperError as error:
-            return items, False, error.code, time.monotonic() >= deadline
+            return ActionsCollectionResult(
+                items,
+                complete=False,
+                error=error.code,
+                timed_out=time.monotonic() >= deadline,
+            )
         if not isinstance(payload, dict) or not isinstance(
             payload.get(collection_key), list
         ):
-            return items, False, "response_error", False
+            return ActionsCollectionResult(
+                items, complete=False, error="response_error"
+            )
         page_items = payload[collection_key]
         items.extend(page_items)
         total_count = payload.get("total_count")
@@ -447,17 +462,23 @@ def actions_collection(
             or isinstance(total_count, bool)
             or total_count < 0
         ):
-            return items, False, "response_error", False
+            return ActionsCollectionResult(
+                items, complete=False, error="response_error"
+            )
         if total_count is not None:
             if total_count < len(items):
-                return items, False, "response_error", False
+                return ActionsCollectionResult(
+                    items, complete=False, error="response_error"
+                )
             if len(items) >= total_count:
-                return items, True, None, False
+                return ActionsCollectionResult(items, complete=True)
             if not page_items:
-                return items, False, "response_error", False
+                return ActionsCollectionResult(
+                    items, complete=False, error="response_error"
+                )
         elif len(page_items) < ACTIONS_PAGE_SIZE:
-            return items, True, None, False
-    return items, False, "response_error", False
+            return ActionsCollectionResult(items, complete=True)
+    return ActionsCollectionResult(items, complete=False, error="response_error")
 
 
 def run_is_resolved(record: ActionsRunRecord) -> bool:
@@ -526,7 +547,12 @@ def actions_wait_result(
         aggregate = "timeout"
     elif "pending" in outcomes:
         aggregate = "pending"
-    elif not outcomes or "unknown" in outcomes:
+    elif (
+        not outcomes
+        or "unknown" in outcomes
+        or error is not None
+        or not discovery_complete
+    ):
         aggregate = "unknown"
     else:
         aggregate = "success"
@@ -565,7 +591,7 @@ def wait_for_actions(
         if time.monotonic() >= deadline:
             timed_out = True
             break
-        runs, complete, collection_error, collection_timed_out = actions_collection(
+        runs_result = actions_collection(
             client,
             repository,
             runs_endpoint,
@@ -576,7 +602,7 @@ def wait_for_actions(
 
         new_records = False
         malformed_run = False
-        for run in runs:
+        for run in runs_result.items:
             if (
                 not isinstance(run, dict)
                 or not isinstance(run.get("id"), int)
@@ -587,7 +613,11 @@ def wait_for_actions(
                 malformed_run = True
                 continue
             run_sha = run.get("head_sha")
-            if isinstance(run_sha, str) and run_sha != head_sha:
+            if not isinstance(run_sha, str) or not run_sha.strip():
+                unidentified_runs.append(run)
+                malformed_run = True
+                continue
+            if run_sha != head_sha:
                 continue
             run_id = run["id"]
             if run_id not in records:
@@ -602,16 +632,16 @@ def wait_for_actions(
         if malformed_run:
             error = "response_error"
             break
-        if collection_timed_out:
+        if runs_result.timed_out:
             timed_out = True
             break
-        if collection_error is not None or not complete:
-            error = collection_error or "response_error"
+        if runs_result.error is not None or not runs_result.complete:
+            error = runs_result.error or "response_error"
             break
 
         new_jobs = False
         for run_id, record in records.items():
-            jobs, jobs_complete, jobs_error, job_timeout = actions_collection(
+            jobs_result = actions_collection(
                 client,
                 repository,
                 f"{runs_endpoint}/{run_id}/jobs",
@@ -620,7 +650,7 @@ def wait_for_actions(
             )
             latest_jobs: dict[int, Any] = {}
             unidentified_jobs: list[Any] = []
-            for job in jobs:
+            for job in jobs_result.items:
                 if not isinstance(job, dict):
                     unidentified_jobs.append(job)
                     continue
@@ -633,12 +663,12 @@ def wait_for_actions(
                     new_jobs = True
             record.jobs = latest_jobs
             record.unidentified_jobs = unidentified_jobs
-            record.jobs_complete = jobs_complete
-            if job_timeout:
+            record.jobs_complete = jobs_result.complete
+            if jobs_result.timed_out:
                 timed_out = True
                 break
-            if jobs_error is not None or not jobs_complete:
-                error = jobs_error or "response_error"
+            if jobs_result.error is not None or not jobs_result.complete:
+                error = jobs_result.error or "response_error"
                 break
         if timed_out or error is not None:
             break

@@ -206,6 +206,7 @@ class PullRequestActionsCliTests(unittest.TestCase):
         self.run_poll_count = 0
         self.merge_response_status = 200
         self.fail_run_page = False
+        self.fail_run_poll: int | None = None
         self.merged = False
         self.api.handler = self.handle_api
 
@@ -231,6 +232,8 @@ class PullRequestActionsCliTests(unittest.TestCase):
             if page == 1:
                 self.run_poll_count += 1
                 self.add_delayed_run_if_due()
+                if self.run_poll_count == self.fail_run_poll:
+                    return 500, {"message": "fixture failure"}
             if page == 2 and self.fail_run_page:
                 return 500, {"message": "fixture failure"}
             start = (page - 1) * helper.ACTIONS_PAGE_SIZE
@@ -446,6 +449,43 @@ class PullRequestActionsCliTests(unittest.TestCase):
         self.assertEqual(actions["error"], "http_error")
         self.assertEqual([item["run"]["id"] for item in actions["runs"]], [1])
 
+    def test_late_run_list_error_cannot_complete_or_auto_merge(self) -> None:
+        self.install_run()
+        self.fail_run_poll = 2
+        with self.wait_patches(quiet=2, interval=1):
+            status, stdout, _stderr = self.create_pr(
+                "--wait-for-actions", "--auto-merge"
+            )
+
+        self.assertNotEqual(status, 0)
+        result = json.loads(stdout)
+        self.assertEqual(result["actions"]["aggregate_state"], "unknown")
+        self.assertEqual(result["actions"]["error"], "http_error")
+        self.assertFalse(result["actions"]["discovery_complete"])
+        self.assertEqual(result["actions"]["runs"][0]["aggregate_state"], "success")
+        self.assertEqual(result["auto_merge"]["state"], "not_attempted")
+        self.assertFalse(
+            any(request[1].endswith("/pulls/7/merge") for request in self.api.requests)
+        )
+
+    def test_run_without_head_sha_is_unknown_and_never_merges(self) -> None:
+        self.install_run()
+        del self.runs[0]["head_sha"]
+        with self.wait_patches(quiet=1, interval=1):
+            status, stdout, _stderr = self.create_pr(
+                "--wait-for-actions", "--auto-merge"
+            )
+
+        self.assertNotEqual(status, 0)
+        actions = json.loads(stdout)["actions"]
+        self.assertEqual(actions["aggregate_state"], "unknown")
+        self.assertEqual(actions["error"], "response_error")
+        self.assertEqual(actions["unidentified_runs"][0]["id"], 1)
+        self.assertEqual(json.loads(stdout)["auto_merge"]["state"], "not_attempted")
+        self.assertFalse(
+            any(request[1].endswith("/pulls/7/merge") for request in self.api.requests)
+        )
+
     def test_no_runs_returns_unknown_after_discovery_period(self) -> None:
         with self.wait_patches(quiet=2, interval=1):
             status, stdout, stderr = self.create_pr("--wait-for-actions")
@@ -457,7 +497,14 @@ class PullRequestActionsCliTests(unittest.TestCase):
         self.assertFalse(actions["runs"])
 
     def test_incomplete_job_data_cannot_report_success(self) -> None:
-        self.runs = [{"id": 1, "status": "completed", "conclusion": "success"}]
+        self.runs = [
+            {
+                "id": 1,
+                "head_sha": "head-sha",
+                "status": "completed",
+                "conclusion": "success",
+            }
+        ]
         self.jobs = {1: []}
         with self.wait_patches(quiet=1, interval=1):
             status, stdout, stderr = self.create_pr("--wait-for-actions")
@@ -493,7 +540,14 @@ class PullRequestActionsCliTests(unittest.TestCase):
                     )
 
     def test_timeout_preserves_partial_results_and_never_merges(self) -> None:
-        self.runs = [{"id": 1, "status": "in_progress", "conclusion": None}]
+        self.runs = [
+            {
+                "id": 1,
+                "head_sha": "head-sha",
+                "status": "in_progress",
+                "conclusion": None,
+            }
+        ]
         self.jobs = {1: [{"id": 10, "status": "in_progress", "conclusion": None}]}
         with patch.object(helper, "ACTIONS_POLL_INTERVAL_SECONDS", 1):
             status, stdout, stderr = self.create_pr(
