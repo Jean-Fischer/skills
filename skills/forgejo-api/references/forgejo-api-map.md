@@ -30,13 +30,19 @@ Run `preflight` first. It and every REST command authenticate with `GET /user`; 
 
 ## Mutation commands
 
+### `workflow-dispatch`
+
+`workflow-dispatch <workflow-file> --ref <ref> [--input key=value ...]` posts to `POST /repos/{owner}/{repo}/actions/workflows/{workflow-file}/dispatches` with `{"ref":"...","inputs":{"key":"value"}}`; the `inputs` field is omitted when no inputs were supplied. Input keys must be non-empty and unique; values may contain `=`. The command returns `{"accepted":true}` for an empty successful response. If Forgejo returns a body directly, it is preserved as `response`. Dispatch never waits for or searches for a run, so absent run identity/status is not inferred. Invalid arguments fail before authentication or mutation.
+
 ### `create-pr`
 
-`create-pr --base <base> --head <head> --title <title> [--body-file <path>]`
+`create-pr --base <base> --head <head> --title <title> [--body-file <path>] [--wait-for-actions] [--timeout <seconds>] [--auto-merge]`
 
-1. Authenticates.
-2. Pages through `GET /repos/{owner}/{repo}/pulls?state=all` and compares validated base/head branch names.
-3. Returns an existing matching PR unchanged; otherwise it posts the supplied base, head, title, and optional body to `/pulls`. A `409 Conflict` triggers one idempotent re-read.
+1. Validates the options, authenticates, and pages through `GET /repos/{owner}/{repo}/pulls?state=all` to find a matching base/head pair.
+2. Returns an existing matching PR unchanged; otherwise posts the supplied base, head, title, and optional body to `/pulls`. A `409 Conflict` triggers one idempotent re-read. With no new flags, behavior and output are unchanged.
+3. `--timeout` and `--auto-merge` require `--wait-for-actions`. The timeout must be finite and positive and bounds the entire Actions wait. Waiting applies to either the created PR or a matching existing PR. It captures that PR response's `head.sha` once, then polls `GET /repos/{owner}/{repo}/actions/runs?head_sha={sha}` and each run's `/actions/runs/{run_id}/jobs` endpoint. Both collections are paged to completion on each poll. Newly appearing runs or jobs are included; completion requires all known runs/jobs to stop being pending and a full discovery quiet period with no new runs. No runs after the discovery period is `unknown`, not success.
+4. Wait output is `{"pull_request": ..., "actions": ...}`. `actions.runs[]` preserves each raw `run`, its `run_state`, aggregate state, each raw `job` with its state, and whether the jobs list was complete. The aggregate distinguishes `success`, `failure`, `cancelled`, `timeout`, `pending`, and `unknown`; it is `success` only with at least one run, complete usable results, every run and job successful, and the discovery period complete. Timeout or unavailable/malformed data returns partial results and a non-zero exit. Other non-success aggregates also exit non-zero. This wait covers Actions only, not external commit statuses.
+5. `--auto-merge` is opt-in and runs the same `Do: "merge"` operation as `merge-pr` only after the aggregate is `success`. Otherwise it reports `not_attempted`; a Forgejo 4xx refusal is reported as `refused`, while a transport or server-side 5xx failure is `unknown`. Both leave the helper from issuing another merge attempt and exit non-zero. Reviews, branch protection, and all other Forgejo merge requirements remain enforced.
 
 ### `create-issue`
 
@@ -84,7 +90,7 @@ Run `preflight` first. It and every REST command authenticate with `GET /user`; 
 
 ## Excluded mutations
 
-Repository label updates/deletion/administration, milestone, assignee, reopening and issue-state changes other than close, PR changes beyond title/body updates and merge, issue dependencies, release, organization, review, and standalone deletion mutations are outside the v1 helper surface. `merge-pr` is the reviewed exception for its coupled post-merge source-branch deletion. Protected-branch rejection and non-fast-forward are Git coordination failures; follow the repository's protected-branch and one-writer policy, not an API bypass.
+Repository label updates/deletion/administration, milestone, assignee, reopening and issue-state changes other than close, PR changes beyond title/body updates and the reviewed merge operation, issue dependencies, release, organization, review, and standalone deletion mutations are outside the v1 helper surface. `merge-pr` and `create-pr --auto-merge` both use the same reviewed merge operation, including its coupled post-merge source-branch deletion. Protected-branch rejection and non-fast-forward are Git coordination failures; follow the repository's protected-branch and one-writer policy, not an API bypass.
 
 ## Capability fallback
 
