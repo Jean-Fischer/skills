@@ -429,6 +429,35 @@ class PullRequestActionsCliTests(unittest.TestCase):
             any(parse_qs(query.query).get("page") == ["2"] for query in job_queries)
         )
 
+    def test_job_pagination_continues_past_one_hundred_pages(self) -> None:
+        self.install_run()
+        self.jobs[1] = [
+            {
+                "id": job_id,
+                "name": f"job-{job_id}",
+                "status": "completed",
+                "conclusion": "success",
+            }
+            for job_id in range(1, 102)
+        ]
+        with (
+            patch.object(helper, "ACTIONS_PAGE_SIZE", 1),
+            self.wait_patches(quiet=1, interval=1),
+        ):
+            status, stdout, stderr = self.create_pr("--wait-for-actions")
+
+        self.assertEqual(status, 0, stderr)
+        actions = json.loads(stdout)["actions"]
+        self.assertEqual(actions["aggregate_state"], "success")
+        self.assertTrue(actions["runs"][0]["jobs_complete"])
+        self.assertEqual(len(actions["runs"][0]["jobs"]), 101)
+        job_pages = [
+            parse_qs(urlparse(request[1]).query).get("page")
+            for request in self.api.requests
+            if urlparse(request[1]).path.endswith("/jobs")
+        ]
+        self.assertIn(["101"], job_pages)
+
     def test_pagination_error_returns_discovered_partial_runs(self) -> None:
         self.install_run(1)
         self.runs.append(

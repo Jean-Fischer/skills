@@ -432,7 +432,8 @@ def actions_collection(
     query_parameters: dict[str, str] | None = None,
 ) -> ActionsCollectionResult:
     items: list[Any] = []
-    for page in range(1, 101):
+    page = 1
+    while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             return ActionsCollectionResult(items, complete=False, timed_out=True)
@@ -478,7 +479,7 @@ def actions_collection(
                 )
         elif len(page_items) < ACTIONS_PAGE_SIZE:
             return ActionsCollectionResult(items, complete=True)
-    return ActionsCollectionResult(items, complete=False, error="response_error")
+        page += 1
 
 
 def run_is_resolved(record: ActionsRunRecord) -> bool:
