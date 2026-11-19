@@ -12,10 +12,12 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import math
 import os
 import re
 import subprocess
 import sys
+import time
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +25,12 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlparse
 from urllib.request import Request, urlopen
+
+
+ACTIONS_PAGE_SIZE = 100
+ACTIONS_POLL_INTERVAL_SECONDS = 2.0
+ACTIONS_QUIET_PERIOD_SECONDS = 10.0
+DEFAULT_ACTIONS_TIMEOUT_SECONDS = 300.0
 
 
 class HelperError(Exception):
@@ -48,6 +56,22 @@ class Repository:
 class Settings:
     api_url: str
     token: str
+
+
+@dataclass
+class ActionsRunRecord:
+    run: dict[str, Any]
+    jobs: dict[int, Any]
+    unidentified_jobs: list[Any]
+    jobs_complete: bool = False
+
+
+@dataclass(frozen=True)
+class ActionsCollectionResult:
+    items: list[Any]
+    complete: bool
+    error: str | None = None
+    timed_out: bool = False
 
 
 def settings_from_environment() -> Settings:
@@ -117,6 +141,7 @@ class ForgejoClient:
         body: dict[str, Any] | None = None,
         *,
         allow_not_found: bool = False,
+        timeout: float = 20,
     ) -> Any | None:
         data = json.dumps(body).encode() if body is not None else None
         request = Request(
@@ -130,7 +155,7 @@ class ForgejoClient:
             },
         )
         try:
-            with urlopen(request, timeout=20) as response:
+            with urlopen(request, timeout=timeout) as response:
                 response_body = response.read()
         except HTTPError as error:
             if allow_not_found and error.code == 404:
@@ -356,35 +381,447 @@ def existing_pull_request(
     )
 
 
-def command_create_pr(args: argparse.Namespace) -> None:
-    client, repository = api_context()
+def actions_outcome(record: Any) -> str:
+    if not isinstance(record, dict):
+        return "unknown"
+    status = record.get("status")
+    conclusion = record.get("conclusion")
+    normalized_status = status.lower() if isinstance(status, str) else ""
+    normalized_conclusion = conclusion.lower() if isinstance(conclusion, str) else ""
+    if normalized_status in {
+        "queued",
+        "pending",
+        "waiting",
+        "requested",
+        "in_progress",
+        "running",
+    }:
+        return "pending"
+    if normalized_conclusion in {"cancelled", "canceled"} or normalized_status in {
+        "cancelled",
+        "canceled",
+    }:
+        return "cancelled"
+    if normalized_conclusion in {"timed_out", "timeout"} or normalized_status in {
+        "timed_out",
+        "timeout",
+    }:
+        return "timeout"
+    if normalized_conclusion in {
+        "failure",
+        "failed",
+        "error",
+        "action_required",
+        "neutral",
+        "skipped",
+    } or normalized_status in {"failure", "failed", "error"}:
+        return "failure"
+    if normalized_status == "success" or (
+        normalized_status == "completed" and normalized_conclusion == "success"
+    ):
+        return "success"
+    return "unknown"
+
+
+def actions_collection(
+    client: ForgejoClient,
+    repository: Repository,
+    endpoint: str,
+    collection_key: str,
+    deadline: float,
+    query_parameters: dict[str, str] | None = None,
+) -> ActionsCollectionResult:
+    items: list[Any] = []
+    page = 1
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return ActionsCollectionResult(items, complete=False, timed_out=True)
+        query = urlencode(
+            {"limit": ACTIONS_PAGE_SIZE, "page": page, **(query_parameters or {})}
+        )
+        try:
+            payload = client.request("GET", f"{endpoint}?{query}", timeout=remaining)
+        except HelperError as error:
+            return ActionsCollectionResult(
+                items,
+                complete=False,
+                error=error.code,
+                timed_out=time.monotonic() >= deadline,
+            )
+        if not isinstance(payload, dict) or not isinstance(
+            payload.get(collection_key), list
+        ):
+            return ActionsCollectionResult(
+                items, complete=False, error="response_error"
+            )
+        page_items = payload[collection_key]
+        items.extend(page_items)
+        total_count = payload.get("total_count")
+        if total_count is not None and (
+            not isinstance(total_count, int)
+            or isinstance(total_count, bool)
+            or total_count < 0
+        ):
+            return ActionsCollectionResult(
+                items, complete=False, error="response_error"
+            )
+        if total_count is not None:
+            if total_count < len(items):
+                return ActionsCollectionResult(
+                    items, complete=False, error="response_error"
+                )
+            if len(items) >= total_count:
+                return ActionsCollectionResult(items, complete=True)
+            if not page_items:
+                return ActionsCollectionResult(
+                    items, complete=False, error="response_error"
+                )
+        elif len(page_items) < ACTIONS_PAGE_SIZE:
+            return ActionsCollectionResult(items, complete=True)
+        page += 1
+
+
+def run_is_resolved(record: ActionsRunRecord) -> bool:
+    if not record.jobs_complete or actions_outcome(record.run) == "pending":
+        return False
+    return all(actions_outcome(job) != "pending" for job in record.jobs.values())
+
+
+def actions_wait_result(
+    head_sha: str,
+    records: dict[int, ActionsRunRecord],
+    unidentified_runs: list[Any],
+    *,
+    timed_out: bool,
+    discovery_complete: bool,
+    error: str | None,
+) -> dict[str, Any]:
+    runs: list[dict[str, Any]] = []
+    outcomes: list[str] = []
+    for run_id, record in records.items():
+        run_state = actions_outcome(record.run)
+        jobs = [
+            {"job": job, "state": actions_outcome(job)} for job in record.jobs.values()
+        ]
+        jobs.extend(
+            {"job": job, "state": "unknown"} for job in record.unidentified_jobs
+        )
+        job_states = [job["state"] for job in jobs]
+        if run_state == "failure" or "failure" in job_states:
+            run_result = "failure"
+        elif run_state == "cancelled" or "cancelled" in job_states:
+            run_result = "cancelled"
+        elif run_state == "timeout" or "timeout" in job_states:
+            run_result = "timeout"
+        elif run_state == "pending" or "pending" in job_states:
+            run_result = "pending"
+        elif (
+            run_state == "success"
+            and jobs
+            and all(state == "success" for state in job_states)
+            and record.jobs_complete
+        ):
+            run_result = "success"
+        else:
+            run_result = "unknown"
+        outcomes.append(run_result)
+        runs.append(
+            {
+                "id": run_id,
+                "run": record.run,
+                "run_state": run_state,
+                "aggregate_state": run_result,
+                "jobs": jobs,
+                "jobs_complete": record.jobs_complete,
+            }
+        )
+    if unidentified_runs:
+        outcomes.append("unknown")
+    if timed_out:
+        aggregate = "timeout"
+    elif "failure" in outcomes:
+        aggregate = "failure"
+    elif "cancelled" in outcomes:
+        aggregate = "cancelled"
+    elif "timeout" in outcomes:
+        aggregate = "timeout"
+    elif "pending" in outcomes:
+        aggregate = "pending"
+    elif (
+        not outcomes
+        or "unknown" in outcomes
+        or error is not None
+        or not discovery_complete
+    ):
+        aggregate = "unknown"
+    else:
+        aggregate = "success"
+    result: dict[str, Any] = {
+        "head_sha": head_sha,
+        "aggregate_state": aggregate,
+        "discovery_complete": discovery_complete,
+        "timed_out": timed_out,
+        "runs": runs,
+    }
+    if unidentified_runs:
+        result["unidentified_runs"] = unidentified_runs
+    if error is not None:
+        result["error"] = error
+    if not records and not unidentified_runs and error is None:
+        result["reason"] = "no_runs"
+    return result
+
+
+def wait_for_actions(
+    client: ForgejoClient,
+    repository: Repository,
+    head_sha: str,
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout_seconds
+    runs_endpoint = f"{repository_path(repository)}/actions/runs"
+    records: dict[int, ActionsRunRecord] = {}
+    unidentified_runs: list[Any] = []
+    quiet_since: float | None = None
+    error: str | None = None
+    timed_out = False
+    discovery_complete = False
+
+    while True:
+        if time.monotonic() >= deadline:
+            timed_out = True
+            break
+        runs_result = actions_collection(
+            client,
+            repository,
+            runs_endpoint,
+            "workflow_runs",
+            deadline,
+            {"head_sha": head_sha},
+        )
+
+        new_records = False
+        malformed_run = False
+        for run in runs_result.items:
+            if (
+                not isinstance(run, dict)
+                or not isinstance(run.get("id"), int)
+                or isinstance(run.get("id"), bool)
+                or run["id"] < 1
+            ):
+                unidentified_runs.append(run)
+                malformed_run = True
+                continue
+            run_sha = run.get("head_sha")
+            if not isinstance(run_sha, str) or not run_sha.strip():
+                unidentified_runs.append(run)
+                malformed_run = True
+                continue
+            if run_sha != head_sha:
+                continue
+            run_id = run["id"]
+            if run_id not in records:
+                records[run_id] = ActionsRunRecord(
+                    run=run,
+                    jobs={},
+                    unidentified_jobs=[],
+                )
+                new_records = True
+            else:
+                records[run_id].run = run
+        if malformed_run:
+            error = "response_error"
+            break
+        if runs_result.timed_out:
+            timed_out = True
+            break
+        if runs_result.error is not None or not runs_result.complete:
+            error = runs_result.error or "response_error"
+            break
+
+        new_jobs = False
+        for run_id, record in records.items():
+            jobs_result = actions_collection(
+                client,
+                repository,
+                f"{runs_endpoint}/{run_id}/jobs",
+                "jobs",
+                deadline,
+            )
+            latest_jobs: dict[int, Any] = {}
+            unidentified_jobs: list[Any] = []
+            for job in jobs_result.items:
+                if not isinstance(job, dict):
+                    unidentified_jobs.append(job)
+                    continue
+                job_id = job.get("id")
+                if not isinstance(job_id, int) or isinstance(job_id, bool):
+                    unidentified_jobs.append(job)
+                    continue
+                latest_jobs[job_id] = job
+                if job_id not in record.jobs:
+                    new_jobs = True
+            record.jobs = latest_jobs
+            record.unidentified_jobs = unidentified_jobs
+            record.jobs_complete = jobs_result.complete
+            if jobs_result.timed_out:
+                timed_out = True
+                break
+            if jobs_result.error is not None or not jobs_result.complete:
+                error = jobs_result.error or "response_error"
+                break
+        if timed_out or error is not None:
+            break
+
+        now = time.monotonic()
+        if now >= deadline:
+            timed_out = True
+            break
+        if new_records or new_jobs:
+            quiet_since = None
+        if not records:
+            if quiet_since is None:
+                quiet_since = now
+        elif all(run_is_resolved(record) for record in records.values()):
+            if quiet_since is None:
+                quiet_since = now
+        else:
+            quiet_since = None
+        if (
+            quiet_since is not None
+            and now - quiet_since >= ACTIONS_QUIET_PERIOD_SECONDS
+        ):
+            discovery_complete = True
+            break
+
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            timed_out = True
+            break
+        time.sleep(min(ACTIONS_POLL_INTERVAL_SECONDS, remaining))
+
+    return actions_wait_result(
+        head_sha,
+        records,
+        unidentified_runs,
+        timed_out=timed_out,
+        discovery_complete=discovery_complete,
+        error=error,
+    )
+
+
+def command_create_pr(args: argparse.Namespace) -> int:
+    if args.auto_merge and not args.wait_for_actions:
+        raise HelperError("arguments_error", "--auto-merge requires --wait-for-actions")
+    if args.timeout is not None and not args.wait_for_actions:
+        raise HelperError("arguments_error", "--timeout requires --wait-for-actions")
+    timeout_seconds = (
+        DEFAULT_ACTIONS_TIMEOUT_SECONDS if args.timeout is None else args.timeout
+    )
+    if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+        raise HelperError(
+            "arguments_error", "--timeout must be a finite positive number"
+        )
+
     pull_request_ref(args.base)
     pull_request_ref(args.head)
-    existing = existing_pull_request(client, repository, args.base, args.head)
-    if existing is not None:
-        output(existing)
-        return
-    body = read_optional_body_file(args.body_file)
-    payload: dict[str, Any] = {
-        "base": args.base,
-        "head": args.head,
-        "title": args.title,
-    }
-    if body is not None:
-        payload["body"] = body
-    try:
-        created = client.request(
-            "POST", f"{repository_path(repository)}/pulls", payload
+    client, repository = api_context()
+    pull_request = existing_pull_request(client, repository, args.base, args.head)
+    if pull_request is None:
+        body = read_optional_body_file(args.body_file)
+        payload: dict[str, Any] = {
+            "base": args.base,
+            "head": args.head,
+            "title": args.title,
+        }
+        if body is not None:
+            payload["body"] = body
+        try:
+            created = client.request(
+                "POST", f"{repository_path(repository)}/pulls", payload
+            )
+        except HelperError as error:
+            if error.code != "http_error" or error.status != 409:
+                raise
+            pull_request = existing_pull_request(
+                client, repository, args.base, args.head
+            )
+            if pull_request is None:
+                raise
+        else:
+            if not isinstance(created, dict):
+                raise HelperError(
+                    "response_error", "Forgejo pull-request response was invalid"
+                )
+            pull_request = created
+
+    if not args.wait_for_actions:
+        output(pull_request)
+        return 0
+
+    head = pull_request.get("head")
+    head_sha = head.get("sha") if isinstance(head, dict) else None
+    if not isinstance(head_sha, str) or not head_sha.strip():
+        actions = actions_wait_result(
+            "",
+            {},
+            [],
+            timed_out=False,
+            discovery_complete=False,
+            error="missing_head_sha",
         )
-    except HelperError as error:
-        if error.code != "http_error" or error.status != 409:
-            raise
-        existing = existing_pull_request(client, repository, args.base, args.head)
-        if existing is None:
-            raise
-        output(existing)
-        return
-    output(created)
+        result = {"pull_request": pull_request, "actions": actions}
+        if args.auto_merge:
+            result["auto_merge"] = {
+                "state": "not_attempted",
+                "reason": "actions_not_successful",
+            }
+        output(result)
+        return 1
+
+    actions = wait_for_actions(client, repository, head_sha, timeout_seconds)
+    result = {"pull_request": pull_request, "actions": actions}
+    succeeded = actions["aggregate_state"] == "success"
+    if args.auto_merge:
+        if succeeded:
+            number = pull_request.get("number")
+            if not isinstance(number, int) or isinstance(number, bool) or number < 1:
+                result["auto_merge"] = {
+                    "state": "refused",
+                    "error": "response_error",
+                }
+                succeeded = False
+            else:
+                try:
+                    merged = merge_pull_request(client, repository, number)
+                except HelperError as error:
+                    merge_result: dict[str, Any] = {
+                        "state": (
+                            "refused"
+                            if error.code == "http_error"
+                            and error.status is not None
+                            and error.status < 500
+                            else "unknown"
+                        ),
+                        "error": error.code,
+                    }
+                    if error.status is not None:
+                        merge_result["status"] = error.status
+                    result["auto_merge"] = merge_result
+                    succeeded = False
+                else:
+                    result["auto_merge"] = {
+                        "state": "merged",
+                        "pull_request": merged,
+                    }
+        else:
+            result["auto_merge"] = {
+                "state": "not_attempted",
+                "reason": "actions_not_successful",
+            }
+    output(result)
+    return 0 if succeeded else 1
 
 
 def read_optional_body_file(path: str | None) -> str | None:
@@ -796,28 +1233,32 @@ def merged_pull_request(
     return pr
 
 
-def command_merge_pr(args: argparse.Namespace) -> None:
-    client, repository = api_context()
-    require_positive_number(args.number)
-    pull_request = merged_pull_request(client, repository, args.number)
+def merge_pull_request(
+    client: ForgejoClient, repository: Repository, number: int
+) -> dict[str, Any]:
+    require_positive_number(number)
+    pull_request = merged_pull_request(client, repository, number)
     if pull_request.get("merged"):
-        output(pull_request)
-        return
+        return pull_request
     try:
         client.request(
             "POST",
-            f"{repository_path(repository)}/pulls/{args.number}/merge",
+            f"{repository_path(repository)}/pulls/{number}/merge",
             {"Do": "merge", "delete_branch_after_merge": True},
         )
     except HelperError as error:
         if error.code != "http_error" or error.status != 409:
             raise
-        pull_request = merged_pull_request(client, repository, args.number)
+        pull_request = merged_pull_request(client, repository, number)
         if not pull_request.get("merged"):
             raise
-        output(pull_request)
-        return
-    output(merged_pull_request(client, repository, args.number))
+        return pull_request
+    return merged_pull_request(client, repository, number)
+
+
+def command_merge_pr(args: argparse.Namespace) -> None:
+    client, repository = api_context()
+    output(merge_pull_request(client, repository, args.number))
 
 
 def labels_for_repository(client: ForgejoClient, repository: Repository) -> list[Any]:
@@ -966,6 +1407,40 @@ def command_create_label(args: argparse.Namespace) -> None:
     output({"created": True, "label": created})
 
 
+def workflow_inputs(values: list[str]) -> dict[str, str]:
+    inputs: dict[str, str] = {}
+    for value in values:
+        key, separator, input_value = value.partition("=")
+        if not separator or not key.strip():
+            raise HelperError(
+                "arguments_error", "workflow inputs must use non-empty key=value pairs"
+            )
+        if key in inputs:
+            raise HelperError("arguments_error", "workflow input keys must be unique")
+        inputs[key] = input_value
+    return inputs
+
+
+def command_workflow_dispatch(args: argparse.Namespace) -> None:
+    require_non_blank(args.workflow_file, "workflow filename")
+    require_non_blank(args.ref, "workflow ref")
+    inputs = workflow_inputs(args.input)
+    client, repository = api_context()
+    payload: dict[str, Any] = {"ref": args.ref}
+    if inputs:
+        payload["inputs"] = inputs
+    response = client.request(
+        "POST",
+        f"{repository_path(repository)}/actions/workflows/"
+        f"{quote(args.workflow_file, safe='')}/dispatches",
+        payload,
+    )
+    result: dict[str, Any] = {"accepted": True}
+    if response is not None:
+        result["response"] = response
+    output(result)
+
+
 def command_rerun_run(args: argparse.Namespace) -> None:
     client, repository = api_context()
     require_positive_number(args.run_id)
@@ -1044,6 +1519,9 @@ def parser() -> argparse.ArgumentParser:
     create_pr.add_argument("--head", required=True)
     create_pr.add_argument("--title", required=True)
     create_pr.add_argument("--body-file")
+    create_pr.add_argument("--wait-for-actions", action="store_true")
+    create_pr.add_argument("--timeout", type=float)
+    create_pr.add_argument("--auto-merge", action="store_true")
     create_pr.set_defaults(handler=command_create_pr)
     create_issue = commands.add_parser("create-issue")
     create_issue.add_argument("--title", required=True)
@@ -1109,6 +1587,11 @@ def parser() -> argparse.ArgumentParser:
     create_label.add_argument("--color", required=True)
     create_label.add_argument("--description")
     create_label.set_defaults(handler=command_create_label)
+    workflow_dispatch = commands.add_parser("workflow-dispatch")
+    workflow_dispatch.add_argument("workflow_file")
+    workflow_dispatch.add_argument("--ref", required=True)
+    workflow_dispatch.add_argument("--input", action="append", default=[])
+    workflow_dispatch.set_defaults(handler=command_workflow_dispatch)
     rerun_run = commands.add_parser("rerun-run")
     rerun_run.add_argument("run_id", type=int)
     rerun_run.set_defaults(handler=command_rerun_run)
@@ -1123,7 +1606,9 @@ def parser() -> argparse.ArgumentParser:
 def main() -> int:
     try:
         args = parser().parse_args()
-        args.handler(args)
+        result = args.handler(args)
+        if isinstance(result, int):
+            return result
     except HelperError as error:
         value: dict[str, Any] = {"error": error.code, "message": error.message}
         if error.status is not None:
