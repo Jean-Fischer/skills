@@ -633,6 +633,54 @@ class PullRequestActionsCliTests(unittest.TestCase):
             merge_requests[0][2], {"Do": "merge", "delete_branch_after_merge": True}
         )
 
+    def test_native_auto_merge_requests_server_side_merge_without_waiting(self) -> None:
+        status, stdout, stderr = self.create_pr("--merge-when-checks-succeed")
+        self.assertEqual(status, 0, stderr)
+        result = json.loads(stdout)
+        self.assertEqual(result["auto_merge"]["state"], "requested")
+        self.assertEqual(result["auto_merge"]["mechanism"], "forgejo")
+        merge_requests = [
+            request
+            for request in self.api.requests
+            if request[0] == "POST" and request[1].endswith("/pulls/7/merge")
+        ]
+        self.assertEqual(
+            merge_requests[0][2],
+            {
+                "Do": "merge",
+                "delete_branch_after_merge": True,
+                "merge_when_checks_succeed": True,
+            },
+        )
+        self.assertFalse(
+            any("/actions/runs" in request[1] for request in self.api.requests)
+        )
+
+    def test_native_auto_merge_refusal_is_reported(self) -> None:
+        self.merge_response_status = 422
+        status, stdout, _stderr = self.create_pr("--merge-when-checks-succeed")
+        self.assertNotEqual(status, 0)
+        result = json.loads(stdout)
+        self.assertEqual(result["auto_merge"]["state"], "refused")
+        self.assertEqual(result["auto_merge"]["status"], 422)
+
+    def test_native_auto_merge_cannot_be_combined_with_actions_wait(self) -> None:
+        for extra in (
+            ("--merge-when-checks-succeed", "--wait-for-actions"),
+            ("--merge-when-checks-succeed", "--timeout", "10"),
+            (
+                "--merge-when-checks-succeed",
+                "--wait-for-actions",
+                "--auto-merge",
+            ),
+        ):
+            with self.subTest(extra=extra):
+                self.api.requests.clear()
+                status, _stdout, stderr = self.create_pr(*extra)
+                self.assertNotEqual(status, 0)
+                self.assertIn("arguments_error", stderr)
+                self.assertEqual(self.api.requests, [])
+
     def test_auto_merge_refusal_is_reported_without_merging(self) -> None:
         self.install_run()
         self.merge_response_status = 405
