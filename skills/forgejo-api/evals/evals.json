@@ -102,6 +102,12 @@
       "prompt": "Create the repository label wayfinder:prototype with color c5def5 and its description.",
       "expected_output": "Use create-label with explicit name, color, and optional description. It normalizes six-digit hex color, returns an exact existing match unchanged, and refuses to update a same-name label with different properties; no raw REST is used.",
       "files": []
+    },
+    {
+      "id": 17,
+      "prompt": "Create a pull request and have Forgejo merge it after its checks pass, including when checks are still pending. Use the helper.",
+      "expected_output": "Check that the instance Swagger schema supports merge_when_checks_succeed, then use create-pr --merge-when-checks-succeed without local Actions waiting. Explain that an accepted request is not proof the PR has merged. Do not use raw REST.",
+      "files": []
     }
   ]
 }

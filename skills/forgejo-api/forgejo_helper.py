@@ -711,7 +711,31 @@ def wait_for_actions(
     )
 
 
+def auto_merge_error_result(error: HelperError) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "state": (
+            "refused"
+            if error.code == "http_error"
+            and error.status is not None
+            and error.status < 500
+            else "unknown"
+        ),
+        "error": error.code,
+    }
+    if error.status is not None:
+        result["status"] = error.status
+    return result
+
+
 def command_create_pr(args: argparse.Namespace) -> int:
+    if args.merge_when_checks_succeed and (
+        args.wait_for_actions or args.auto_merge or args.timeout is not None
+    ):
+        raise HelperError(
+            "arguments_error",
+            "--merge-when-checks-succeed cannot be combined with "
+            "--wait-for-actions, --timeout, or --auto-merge",
+        )
     if args.auto_merge and not args.wait_for_actions:
         raise HelperError("arguments_error", "--auto-merge requires --wait-for-actions")
     if args.timeout is not None and not args.wait_for_actions:
@@ -756,6 +780,27 @@ def command_create_pr(args: argparse.Namespace) -> int:
                 )
             pull_request = created
 
+    if args.merge_when_checks_succeed:
+        result: dict[str, Any] = {"pull_request": pull_request}
+        number = pull_request.get("number")
+        if not isinstance(number, int) or isinstance(number, bool) or number < 1:
+            result["auto_merge"] = {
+                "state": "refused",
+                "error": "response_error",
+            }
+        else:
+            try:
+                request_merge_when_checks_succeed(client, repository, number)
+            except HelperError as error:
+                result["auto_merge"] = auto_merge_error_result(error)
+            else:
+                result["auto_merge"] = {
+                    "state": "requested",
+                    "mechanism": "forgejo",
+                }
+        output(result)
+        return 0 if result["auto_merge"]["state"] == "requested" else 1
+
     if not args.wait_for_actions:
         output(pull_request)
         return 0
@@ -796,19 +841,7 @@ def command_create_pr(args: argparse.Namespace) -> int:
                 try:
                     merged = merge_pull_request(client, repository, number)
                 except HelperError as error:
-                    merge_result: dict[str, Any] = {
-                        "state": (
-                            "refused"
-                            if error.code == "http_error"
-                            and error.status is not None
-                            and error.status < 500
-                            else "unknown"
-                        ),
-                        "error": error.code,
-                    }
-                    if error.status is not None:
-                        merge_result["status"] = error.status
-                    result["auto_merge"] = merge_result
+                    result["auto_merge"] = auto_merge_error_result(error)
                     succeeded = False
                 else:
                     result["auto_merge"] = {
@@ -1233,6 +1266,21 @@ def merged_pull_request(
     return pr
 
 
+def request_merge_when_checks_succeed(
+    client: ForgejoClient, repository: Repository, number: int
+) -> None:
+    require_positive_number(number)
+    client.request(
+        "POST",
+        f"{repository_path(repository)}/pulls/{number}/merge",
+        {
+            "Do": "merge",
+            "delete_branch_after_merge": True,
+            "merge_when_checks_succeed": True,
+        },
+    )
+
+
 def merge_pull_request(
     client: ForgejoClient, repository: Repository, number: int
 ) -> dict[str, Any]:
@@ -1522,6 +1570,7 @@ def parser() -> argparse.ArgumentParser:
     create_pr.add_argument("--wait-for-actions", action="store_true")
     create_pr.add_argument("--timeout", type=float)
     create_pr.add_argument("--auto-merge", action="store_true")
+    create_pr.add_argument("--merge-when-checks-succeed", action="store_true")
     create_pr.set_defaults(handler=command_create_pr)
     create_issue = commands.add_parser("create-issue")
     create_issue.add_argument("--title", required=True)
