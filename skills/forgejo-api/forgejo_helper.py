@@ -711,6 +711,22 @@ def wait_for_actions(
     )
 
 
+def auto_merge_error_result(error: HelperError) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "state": (
+            "refused"
+            if error.code == "http_error"
+            and error.status is not None
+            and error.status < 500
+            else "unknown"
+        ),
+        "error": error.code,
+    }
+    if error.status is not None:
+        result["status"] = error.status
+    return result
+
+
 def command_create_pr(args: argparse.Namespace) -> int:
     if args.merge_when_checks_succeed and (
         args.wait_for_actions or args.auto_merge or args.timeout is not None
@@ -776,19 +792,7 @@ def command_create_pr(args: argparse.Namespace) -> int:
             try:
                 request_merge_when_checks_succeed(client, repository, number)
             except HelperError as error:
-                merge_result: dict[str, Any] = {
-                    "state": (
-                        "refused"
-                        if error.code == "http_error"
-                        and error.status is not None
-                        and error.status < 500
-                        else "unknown"
-                    ),
-                    "error": error.code,
-                }
-                if error.status is not None:
-                    merge_result["status"] = error.status
-                result["auto_merge"] = merge_result
+                result["auto_merge"] = auto_merge_error_result(error)
             else:
                 result["auto_merge"] = {
                     "state": "requested",
@@ -837,19 +841,7 @@ def command_create_pr(args: argparse.Namespace) -> int:
                 try:
                     merged = merge_pull_request(client, repository, number)
                 except HelperError as error:
-                    merge_result: dict[str, Any] = {
-                        "state": (
-                            "refused"
-                            if error.code == "http_error"
-                            and error.status is not None
-                            and error.status < 500
-                            else "unknown"
-                        ),
-                        "error": error.code,
-                    }
-                    if error.status is not None:
-                        merge_result["status"] = error.status
-                    result["auto_merge"] = merge_result
+                    result["auto_merge"] = auto_merge_error_result(error)
                     succeeded = False
                 else:
                     result["auto_merge"] = {
